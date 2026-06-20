@@ -183,6 +183,7 @@
    ============================================================ */
 const CONFIG = {
   SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzk4TYO167dwBcjFuuf-GIhtuCv-rQ0fd-zUsMiju9cwxHO74x1i0NjH4OrqgieyCGlfQ/exec",
+  BYPASS_LOGIN: true,             // TEMP: skip login and open all sections to review layout. Set false to re-enable login.
   PASS_THRESHOLD: 85,             // overall % to "pass"
   OUTLETS: [
     "Sangeetha - Guindy",
@@ -531,6 +532,7 @@ document.getElementById('btnLogout').onclick=()=>{
   const other=document.createElement('option');other.value="__other";other.textContent="Other…";sel.appendChild(other);
   document.getElementById('m_date').valueAsDate=new Date();
   document.getElementById('thLabel').textContent=CONFIG.PASS_THRESHOLD+'%';
+  if(CONFIG.BYPASS_LOGIN){ startSession({token:null,name:'Preview',mobile:'',sections:['ALL'],preview:true}); return; }  // TEMP layout-review bypass
   if(!CONFIG.SCRIPT_URL){document.getElementById('lg_preview').classList.remove('hidden');lgMsg('Backend not linked yet — see setup guide. You can Preview below.','');}
   else { tryAutoLogin().then(ok=>{ if(!ok) lgMsg('',''); }); }   // remember-me: skip OTP if device is already trusted
 })();
@@ -747,15 +749,4 @@ document.getElementById('btnSubmit').onclick=async()=>{
       setTimeout(()=>{btn.disabled=false;btn.textContent='Submit Audit';},2500);
     }else{
       downloadLocal(payload);
-      toast((r.error||'Submit rejected')+' — saved a CSV backup',4600);
-      btn.disabled=false;btn.textContent='Submit Audit';
-    }
-  }catch(err){
-    downloadLocal(payload);
-    toast('Network error — saved a CSV copy as backup',4200);
-    btn.disabled=false;btn.textContent='Submit Audit';
-  }
-};
-</script>
-</body>
-</html>
+      toast((r.error||'Submit rejected')+' — saved a CSV
