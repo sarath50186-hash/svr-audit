@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVR Store Visit Audit</title>
+<style>
+  :root{
+    --brand:#7a1f2b; --brand2:#a32c3c; --bg:#f4f5f7; --card:#fff;
+    --ink:#1f2430; --muted:#6b7280; --line:#e5e7eb;
+    --green:#16a34a; --amber:#d97706; --red:#dc2626;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+  header{position:sticky;top:0;z-index:30;background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:10px 14px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+  .h-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .h-top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.2px}
+  .overall{display:flex;align-items:center;gap:10px}
+  .ring{font-size:13px;background:rgba(255,255,255,.18);padding:4px 10px;border-radius:20px;font-weight:700;white-space:nowrap}
+  .wrap{max-width:920px;margin:0 auto;padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .meta-grid .full{grid-column:1/-1}
+  label.fld{display:block;font-size:12px;color:var(--muted);font-weight:600;margin-bottom:4px}
+  input,select,textarea{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff;color:var(--ink);font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand2);outline-offset:-1px;border-color:var(--brand2)}
+  .tabs{display:flex;gap:6px;overflow-x:auto;padding:8px 0 4px;position:sticky;top:50px;background:var(--bg);z-index:20;-webkit-overflow-scrolling:touch}
+  .tab{flex:0 0 auto;padding:8px 12px;border-radius:20px;border:1px solid var(--line);background:#fff;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;position:relative}
+  .tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .tab .pct{font-size:11px;opacity:.85;margin-left:5px}
+  .tab .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-left:5px;vertical-align:middle}
+  .sec-title{font-size:16px;font-weight:700;margin:2px 0 2px}
+  .sec-sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .group-h{font-size:13px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 6px;padding-bottom:4px;border-bottom:2px solid var(--line)}
+  .item{padding:10px 0;border-bottom:1px solid var(--line)}
+  .item:last-child{border-bottom:none}
+  .item-txt{font-size:13.5px;line-height:1.4;margin-bottom:8px;display:flex;gap:6px}
+  .item-num{color:var(--muted);font-weight:700;flex:0 0 auto}
+  .scale{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .sc{min-width:38px;height:36px;padding:0 4px;border:1px solid var(--line);background:#fff;border-radius:8px;font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .sc.na{min-width:42px;font-size:12px;color:var(--muted)}
+  .sc.sel{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .sc.yes.sel{background:var(--green);border-color:var(--green)}
+  .sc.no.sel{background:var(--red);border-color:var(--red)}
+  .sc.na.sel{background:var(--muted);color:#fff;border-color:var(--muted)}
+  .note-btn{margin-left:auto;background:none;border:1px solid var(--line);border-radius:8px;height:36px;width:40px;font-size:15px;cursor:pointer;color:var(--muted)}
+  .note-btn.has{background:#fff7ed;border-color:var(--amber);color:var(--amber)}
+  .note-box{margin-top:8px}
+  textarea{min-height:54px;resize:vertical}
+  .hidden{display:none!important}
+  .secscore{display:flex;justify-content:space-between;align-items:center;background:#faf7f3;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:12px;font-weight:700}
+  .secscore .pct{font-size:18px}
+  .bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:6px}
+  .bar > i{display:block;height:100%;background:var(--green);width:0}
+  .footer-actions{position:sticky;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 12px;display:flex;gap:8px;z-index:25}
+  .btn{flex:1;padding:12px;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer}
+  .btn-primary{background:var(--brand);color:#fff}
+  .btn-primary:disabled{opacity:.5}
+  .btn-ghost{background:#eef0f3;color:var(--ink);flex:0 0 auto;padding:12px 14px}
+  .toast{position:fixed;left:50%;bottom:78px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;z-index:50;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:90%;text-align:center}
+  .req{color:var(--red)}
+  .legend{font-size:11px;color:var(--muted);margin-top:8px}
+  .summary-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+  .summary-row b{font-variant-numeric:tabular-nums}
+  @media(max-width:520px){.meta-grid{grid-template-columns:1fr}.sc{min-width:34px}}
+  @media print{header,.tabs,.footer-actions,.note-btn{display:none}.card{break-inside:avoid}}
+  /* login */
+  .login-overlay{position:fixed;inset:0;background:linear-gradient(160deg,#7a1f2b,#4a121a);z-index:100;display:flex;align-items:center;justify-content:center;padding:18px}
+  .login-box{background:#fff;border-radius:16px;padding:24px 22px;max-width:380px;width:100%;box-shadow:0 14px 44px rgba(0,0,0,.35)}
+  .login-box h2{margin:0 0 2px;color:var(--brand);font-size:20px}
+  .login-box p.sub{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .login-box .step{display:none}
+  .login-box .step.active{display:block}
+  .login-box .fld{margin-top:2px}
+  .login-box .btn{width:100%;margin-top:14px}
+  .otp-input{letter-spacing:8px;text-align:center;font-size:20px;font-weight:700}
+  .msg{font-size:13px;margin-top:12px;min-height:18px;line-height:1.4}
+  .msg.err{color:var(--red)} .msg.ok{color:var(--green)}
+  .login-foot{display:flex;justify-content:space-between;margin-top:8px}
+  .link-btn{background:none;border:none;color:var(--brand);font-weight:600;cursor:pointer;font-size:13px;padding:6px 0}
+  .whoami{font-size:11px;opacity:.92;margin-top:2px}
+  .logout{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:14px;cursor:pointer}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(122,31,43,.3);border-top-color:var(--brand);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>SVR Audit Login</h2>
+    <p class="sub">HOD access — sign in with your registered mobile.</p>
+
+    <div class="step active" id="step_mobile">
+      <label class="fld">Mobile Number</label>
+      <input type="tel" id="lg_mobile" inputmode="numeric" placeholder="10-digit mobile" maxlength="10" autocomplete="tel">
+      <button class="btn btn-primary" id="lg_send">Send OTP</button>
+    </div>
+
+    <div class="step" id="step_otp">
+      <label class="fld">Enter OTP <span id="lg_emailHint" style="font-weight:400;color:var(--muted)"></span></label>
+      <input type="tel" id="lg_otp" inputmode="numeric" class="otp-input" placeholder="••••••" maxlength="6" autocomplete="one-time-code">
+      <button class="btn btn-primary" id="lg_verify">Verify &amp; Login</button>
+      <div class="login-foot">
+        <button class="link-btn" id="lg_back">‹ Change number</button>
+        <button class="link-btn" id="lg_resend">Resend OTP</button>
+      </div>
+    </div>
+
+    <div class="msg" id="lg_msg"></div>
+    <div id="lg_preview" class="hidden" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <button class="link-btn" id="lg_previewBtn">Preview without login (all sections) ›</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="h-top">
+    <div>
+      <h1>SVR Store Visit Audit</h1>
+      <div class="whoami" id="whoami"></div>
+    </div>
+    <div class="overall">
+      <span class="ring" id="overallRing">0%</span>
+      <button class="logout hidden" id="btnLogout">Logout</button>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <!-- Audit meta -->
+  <div class="card" id="metaCard">
+    <div class="meta-grid">
+      <div>
+        <label class="fld">Outlet <span class="req">*</span></label>
+        <select id="m_outlet"><option value="">Select outlet…</option></select>
+      </div>
+      <div>
+        <label class="fld">Audit Date <span class="req">*</span></label>
+        <input type="date" id="m_date">
+      </div>
+      <div>
+        <label class="fld">Auditor Name <span class="req">*</span></label>
+        <input type="text" id="m_auditor" placeholder="Your name" autocomplete="name">
+      </div>
+      <div>
+        <label class="fld">Manager Name</label>
+        <input type="text" id="m_manager" placeholder="Outlet manager">
+      </div>
+      <div class="full">
+        <label class="fld">FSSAI Licence No. &amp; Validity <span style="font-weight:400">(for Food Safety section)</span></label>
+        <input type="text" id="m_fssai" placeholder="Licence number — valid till …">
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="sections"></div>
+
+  <!-- Final summary card -->
+  <div class="card" id="finalCard">
+    <div class="sec-title">Audit Summary</div>
+    <div class="sec-sub">Section-wise scores. Submit to log this audit to the Google Sheet.</div>
+    <div id="summaryList"></div>
+    <div class="secscore" style="margin-top:14px">
+      <span>OVERALL</span><span class="pct" id="finalPct">0%</span>
+    </div>
+    <div class="bar"><i id="finalBar"></i></div>
+    <div class="legend">Pass threshold: <b id="thLabel">85%</b> &nbsp;•&nbsp; <span style="color:var(--green)">●</span> ≥85% &nbsp; <span style="color:var(--amber)">●</span> 70–84% &nbsp; <span style="color:var(--red)">●</span> &lt;70%</div>
+  </div>
+</div>
+
+<div class="footer-actions">
+  <button class="btn btn-ghost" id="btnDownload" title="Save a copy">⬇︎</button>
+  <button class="btn btn-ghost" id="btnPrint" title="Print / PDF">🖶</button>
+  <button class="btn btn-primary" id="btnSubmit">Submit Audit</button>
+</div>
+
+<script>
+/* ============================================================
+   CONFIG — paste your deployed Google Apps Script Web App URL.
+   ============================================================ */
+const CONFIG = {
+  SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzk4TYO167dwBcjFuuf-GIhtuCv-rQ0fd-zUsMiju9cwxHO74x1i0NjH4OrqgieyCGlfQ/exec",
+  PASS_THRESHOLD: 85,             // overall % to "pass"
+  OUTLETS: [
+    "Sangeetha - Guindy",
+    "Sangeetha - Kovilambakkam",
+    "Sangeetha - Medavakkam",
+    "Sangeetha - Mylapore",
+    "Sangeetha - Nandambakkam",
+    "Sangeetha - Perangalathur",
+    "Sangeetha - Poonamallee",
+    "Sangeetha - RA PURAM A/C",
+    "Sangeetha - Ramapuram",
+    "Sangeetha - Santhome",
+    "Sangeetha - Urapakkam",
+    "Sangeetha Fast Foods - RA Puram"
+  ]
+};
+
+/* ============================================================
+   AUDIT DEFINITION
+   type 'rating' => score 1..5 per item (NA excluded)
+   type 'yesno'  => Yes=2, No=0 (NA excluded)
+   ============================================================ */
+const AUDIT = [
+{key:"KITCHEN", title:"Kitchen", type:"rating", maxRef:190, groups:[
+  {name:"Grooming", items:[
+   "Uniforms of all kitchen staff is neat, clean and free of stains",
+   "Finger nails are trimmed, clean and unpolished",
+   "No long hair or beard",
+   "Jewellery / finger ring / threads / wrist watch are not worn while handling food",
+   "Kitchen staff are wearing caps / disposable caps inside the premises",
+   "Shoes are worn by staff and kitchen supervisors",
+   "Ladies wear hairnet and stone jewellery not allowed"]},
+  {name:"General Cleanliness", items:[
+   "Exhaust hood and duct are clean, free from oil deposits",
+   "Fresh air duct are dust free",
+   "Food crates are cleaned and free of food deposits",
+   "Wall tiles and floor are not broken and clean",
+   "Corners of all walls are clean",
+   "No hanging open wires; switchboxes are not damaged and are clean",
+   "Cooking equipments are clean",
+   "Dustbins are cleanly maintained and not overflowing",
+   "Kitchen is dry and neatly mopped",
+   "All walls, fixtures, ceiling is free of cracks / cobwebs",
+   "No pest evident in the kitchen and door gaps are adequately sealed to prevent pest entries",
+   "Condiment holder, spices boxes are clean without any grease and build-up",
+   "Cold holding equipment's (under-counter chiller, vertical chiller, beverage chiller) are clean",
+   "Clean utensils are used for cooking food"]},
+  {name:"Food Storage", items:[
+   "Food stored at correct temperature (hot food stored hot and cold food stored cold)",
+   "Food stored in cold holding equipment's are well organised with tags (no expiry items evident)",
+   "Food stored in hot holding equipment's (hotcase / bain marie) are well organised with tags (no expiry items evident)",
+   "All products once open / unsealed / semi-processed or in use are transferred to an air-tight container, stored per product guidelines with proper date tagging",
+   "Food storage shelves are well organised with tags and FIFO followed",
+   "Clean utensils are used for storing cooked food",
+   "No spoiled food evident and in use"]},
+  {name:"Store Room Maintenance", items:[
+   "Store room clean and well organised",
+   "Store room free of pests",
+   "Store room following FIFO",
+   "No expiry products found in store room",
+   "Proper store records maintained"]},
+  {name:"Item Quality", items:[
+   "Rate presentation of all products tasted",
+   "Rate taste of all products",
+   "Rate freshness of all products tasted",
+   "All items available on menu for sale",
+   "All items are of standard and free of complaints"]}
+]},
+
+{key:"FOH", title:"FOH", type:"rating", maxRef:190, groups:[
+  {name:"Grooming", items:[
+   "Uniforms of service staff is neat, clean and free of stains",
+   "Finger nails are trimmed and clean",
+   "No long hair or beard for men (unshaved is unacceptable, including supervisor)",
+   "Captain wearing appropriate uniform — neat uniform with tie, black socks, black shoes and name tag",
+   "Waiters wearing appropriate uniform — neat uniform with jacket/apron, black socks, black shoes and name tag",
+   "Facility staff wearing appropriate uniform — neat uniform with jacket/apron, black socks and shoes",
+   "Management staff wearing appropriate uniform — neat uniform with tie, black socks, black shoes with name tag"]},
+  {name:"Cleanliness", items:[
+   "Restaurant entrance is neat and clean (including signage boards)",
+   "Restaurant interior is neat and clean",
+   "Restaurant restrooms neat and clean (dustbins clean with liners and not overflowing)",
+   "All tables, chairs and sofas is neat and clean",
+   "No damaged tiles, cracked paint or broken furniture",
+   "All light fitting is clean and in working condition",
+   "Restaurant AC decks clean with temperature comfortable for guest",
+   "No dust or cobwebs in restaurant",
+   "Menu card is cleaned and not worn out",
+   "Bill folders are clean and not worn out",
+   "CC machines are clean and working",
+   "Cruet sets and tissue paper holders are neat and clean",
+   "Water jugs and cups are clean",
+   "Service tray and utensils clean and in good condition",
+   "Tables are cleaned promptly",
+   "Service station neat, clean and well organized"]},
+  {name:"Hospitality", items:[
+   "Service standard operating procedures followed consistently",
+   "Welcomes guests upon arrival and thanks them at departure",
+   "Menu suggestive selling and upselling done on specials and an item that complements the meal",
+   "Sufficient and right cutlery and crockery available for service",
+   "Staff satisfactorily answers any questions by customers on menu items — good menu knowledge evident",
+   "Staff interaction with guests is professional and clear",
+   "Feedback book is present, visible and acknowledged",
+   "QR code for review is present on table and guest being requested for reviews",
+   "Guest complaints being resolved promptly",
+   "Music volume appropriate"]},
+  {name:"Product Quality", items:[
+   "Product quality appearance good and meets brand standards",
+   "Product served at acceptable temperature",
+   "Product served at acceptable time",
+   "Guest receives correct item size and accompaniments",
+   "Product ordered by guest is available"]}
+]},
+
+{key:"HR", title:"HR", type:"rating", maxRef:55, groups:[
+  {name:"", items:[
+   "Staff PF enrollment is above 80% (PF coverage exceeds 80% for all staff)",
+   "No underage staff — 100% compliance with minimum age requirements for employment",
+   "Accurate staff attendance maintained and updated till date",
+   "Biometric attendance system is fully implemented for staff",
+   "Duty roster is prepared and maintained as per schedule",
+   "Adequate staffing levels are maintained across all departments",
+   "Trainees performance being tracked",
+   "Staff performance being tracked",
+   "Leave form — planned leave of more than 3 days filled and approved by management & documented",
+   "No staff grievances reported against management",
+   "Staff room and canteen facilities inspected and found satisfactory"]}
+]},
+
+{key:"GENERAL", title:"General", type:"rating", maxRef:65, groups:[
+  {name:"Facility & Hygiene", items:[
+   "Kitchen area is maintained in clean and hygienic condition",
+   "Restaurant area is maintained in clean and hygienic condition",
+   "Restrooms are clean and well maintained",
+   "Cafeteria area is clean",
+   "Staff room is neat and tidy",
+   "Staff restrooms are clean and properly maintained",
+   "Storeroom is clean, organized, and clutter-free"]},
+  {name:"Operations & Compliance", items:[
+   "Scrap sales are properly recorded and accounted",
+   "Waste segregation protocols are followed",
+   "RO plant, exhaust system, and motor sump are operational",
+   "All kitchen equipment is in working condition",
+   "All kitchen staff demonstrate strong product knowledge",
+   "New staff training is tracked and supervised"]}
+]},
+
+{key:"ACCOUNTS", title:"Accounts", type:"rating", maxRef:35, groups:[
+  {name:"", items:[
+   "Random cash verification matches physical balance",
+   "Outstanding receivables are within 30 days",
+   "Monthly cash variance is under ₹2,000",
+   "No bills reprinted during the period",
+   "Cashiers are adequately trained and competent",
+   "Cash purchase kept to a minimum",
+   "Petpooja purchase report reconciles with actual stock"]}
+]},
+
+{key:"OPS", title:"OPS", type:"rating", maxRef:165, groups:[
+  {name:"Facility & Ambience", items:[
+   "Staff room is clean and well maintained",
+   "Signage is clean, legible, and functional",
+   "Parking area is clean and organized",
+   "Garbage bins are clean and odor free",
+   "Security personnel are in uniform and well groomed",
+   "Special items are displayed prominently outside",
+   "Entrance mats are clean and properly placed",
+   "Host desk and waitlist management system are operational"]},
+  {name:"Staffing & Training", items:[
+   "Front of House staffing levels are adequate",
+   "FOH staff are properly trained",
+   "Back of House staffing levels are adequate",
+   "BOH staff are properly trained",
+   "Housekeeping and maintenance staff are adequate, trained, and well groomed",
+   "Cashiers are adequate, trained, and well groomed"]},
+  {name:"Operations & Sales", items:[
+   "Table tent cards are available to support upselling",
+   "Special item sales are tracked",
+   "Juice and beverage sales are monitored",
+   "Customer feedback is actively collected and addressed",
+   "Duty roster is accurately maintained",
+   "Staff attendance is properly recorded",
+   "Food wastage is monitored continuously",
+   "Bulk and catering orders are handled efficiently",
+   "Managers conduct regular team briefings",
+   "Bill cancellations and KOT modifications are minimal",
+   "Online and offline operating hours are consistent and correct",
+   "Lost and found procedures are followed",
+   "MIS protocols are adhered to correctly",
+   "Staff morale is positive",
+   "Manager performance meets standards",
+   "Reporting systems are followed accurately",
+   "Competitor quality and pricing are monitored regularly",
+   "Kitchen and service teams hold effective inter-department briefings",
+   "All daily operational checklists are completed correctly"]}
+]},
+
+{key:"FOODSAFETY", title:"Food Safety", type:"yesno", maxRef:72, groups:[
+  {name:"Personal Hygiene of Food Handlers", items:[
+   "Staff found wearing clean and complete uniform; not wearing jewellery at food area; wearing proper headgear; with trimmed nail and beard in food production area; without open wound or suffering from diseases (check designation-wise)"]},
+  {name:"Storage of Raw Material", items:[
+   "Incoming material procured per internally laid-down specification from approved vendors and records maintained (COA, Form E, specs, supplier name/address, batch no, mfg, use-by/expiry date, quantity, etc.)",
+   "Raw materials inspected at time of receiving for food safety hazards (farm produce checked for spoilage and accepted only in good condition)",
+   "Incoming material, semi or final products stored per temperature requirement in a hygienic environment; FIFO and FEFO practiced (animal-origin food stored ≤4°C)",
+   "Packing and wrapping material in contact with food is clean and of food-grade quality",
+   "Adequate storage facility for food, packaging materials, chemicals, personnel items etc. is available"]},
+  {name:"Temperature of Product — Critical Process", items:[
+   "Frozen food thawed hygienically; no thawed food stored for later use (thawed in refrigerator ≤5°C, in microwave, or in cold potable running water ≤15°C within 90 min)",
+   "Vegetarian items cooked to minimum 60°C for 10 min or 65°C for 2 min core food temperature",
+   "Cooked food intended for refrigeration cooled appropriately (high-risk food 60°C→21°C within 2 hrs, then →5°C within 2 hrs)",
+   "Food portioning done in hygienic conditions (high-risk food portioned in refrigerated area or refrigerated within 30 min; large amounts portioned below 15°C)",
+   "Hot food held at 65°C; cold foods at 5°C; frozen products at –18°C or below",
+   "Reheating done appropriately (core temp reaches 75°C for at least 2 min); no indirect reheating (hot water / bain marie / lamp)",
+   "Oil used is suitable for cooking; periodic verification of fat/oil by colour, flavour and floated elements (TPC value)"]},
+  {name:"Infrastructure of Premises", items:[
+   "Adequate working space, permitting maintenance and cleaning to prevent entry of dirt, dust and pests",
+   "Internal structure and fittings made of non-toxic and impermeable material",
+   "Walls, ceilings and doors free from flaking paint or plaster, condensation and shedding particles",
+   "Floors are non-absorbent, non-slippery and sloped appropriately",
+   "Windows kept closed and fitted with insect-proof screen when opening to external environment",
+   "Doors smooth and non-absorbent; suitable precautions taken to prevent entry of pests",
+   "Premise has sufficient lighting; lighting fixtures protected to prevent contamination on breakage",
+   "Adequate ventilation provided within the premises",
+   "Monthly visual inspection tag attached, up to date, and initialed by an authorized checker"]},
+  {name:"Transportation", items:[
+   "Vehicle for food transportation kept clean and in good repair at required temperature (hot 65°C, cold 5°C, or transported within 2 hrs of preparation)",
+   "Food and non-food products transported in the same vehicle are separated adequately to avoid risk to food"]},
+  {name:"Maintenance and Sanitation", items:[
+   "Cleaning of equipment and food premises done per cleaning schedule; no stagnation of water in food zones",
+   "Preventive maintenance of equipment and machinery carried out regularly per manufacturer; records maintained",
+   "Pest control program available and activities carried out by trained, experienced personnel",
+   "No sign of pest activity or infestation in premises (eggs, larvae, faeces etc.)",
+   "Drains designed to meet expected flow loads and equipped with grease and cockroach traps",
+   "Food waste and refuse removed periodically from food handling areas to avoid accumulation"]},
+  {name:"Record Keeping", items:[
+   "Updated FSSAI licence displayed prominently; food safety display board available at site",
+   "FOSTAC training certificate of food handlers available",
+   "All food handlers undergo annual medical examination and inoculation against enteric diseases; records maintained",
+   "Food material tested through internal or accredited lab; records checked",
+   "Potable water (IS:10500, tested semi-annually with records) used as ingredient or in contact with food surfaces",
+   "Measuring and monitoring devices calibrated periodically"]}
+]}
+];
+</script>
+<script>
+/* ============================================================
+   APP LOGIC  (auth-gated, role-filtered)
+   ============================================================ */
+const state = {};            // state[secKey][globalIdx] = {value, note}
+const elTabs = document.getElementById('tabs');
+const elSections = document.getElementById('sections');
+let SESSION = null;          // {token, name, mobile, sections:[keys] | ['ALL']}
+let RENDERED = [];           // AUDIT entries currently shown
+
+/* ---------- backend helper ---------- */
+async function api(payload){
+  const res = await fetch(CONFIG.SCRIPT_URL,{
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'}, // simple request, no preflight
+    body:JSON.stringify(payload)
+  });
+  return res.json();
+}
+function lgMsg(text,cls){const m=document.getElementById('lg_msg');m.textContent=text;m.className='msg'+(cls?' '+cls:'');}
+
+/* ---------- remember-me (auto-login) ---------- */
+const AUTH_KEY='svrAuth';
+function saveAuth(o){try{localStorage.setItem(AUTH_KEY,JSON.stringify(o));}catch(e){}}
+function loadAuth(){try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null');}catch(e){return null;}}
+function clearAuth(){try{localStorage.removeItem(AUTH_KEY);}catch(e){}}
+async function tryAutoLogin(){
+  const a=loadAuth();
+  if(!a||!a.mobile||!a.rememberToken||!CONFIG.SCRIPT_URL) return false;
+  lgMsg('Signing you in…','');
+  try{
+    const r=await api({action:'resume',mobile:a.mobile,rememberToken:a.rememberToken});
+    if(r.ok){startSession({token:r.token,name:r.name,mobile:a.mobile,sections:r.sections,rememberToken:a.rememberToken});return true;}
+    clearAuth();
+  }catch(e){/* offline — fall through to manual login */}
+  return false;
+}
+
+/* ---------- LOGIN FLOW ---------- */
+function showStep(id){document.querySelectorAll('.login-box .step').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');}
+
+document.getElementById('lg_send').onclick=async()=>{
+  const mobile=(document.getElementById('lg_mobile').value||'').replace(/\D/g,'');
+  if(mobile.length<10){lgMsg('Enter a valid 10-digit mobile number','err');return;}
+  if(!CONFIG.SCRIPT_URL){lgMsg('App not linked to backend yet — use Preview below.','err');return;}
+  const btn=document.getElementById('lg_send');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Sending…';
+  try{
+    const r=await api({action:'request_otp',mobile});
+    if(r.ok){document.getElementById('lg_emailHint').textContent=r.email?('· sent to '+r.email):'';lgMsg('OTP sent. Check your email.','ok');showStep('step_otp');document.getElementById('lg_otp').focus();}
+    else lgMsg(r.error||'This mobile is not registered as an HOD.','err');
+  }catch(e){lgMsg('Network error — check connection and try again.','err');}
+  btn.disabled=false;btn.textContent='Send OTP';
+};
+document.getElementById('lg_resend').onclick=()=>document.getElementById('lg_send').click();
+document.getElementById('lg_back').onclick=()=>{showStep('step_mobile');lgMsg('');};
+
+document.getElementById('lg_verify').onclick=async()=>{
+  const mobile=(document.getElementById('lg_mobile').value||'').replace(/\D/g,'');
+  const otp=(document.getElementById('lg_otp').value||'').replace(/\D/g,'');
+  if(otp.length<4){lgMsg('Enter the OTP from your email','err');return;}
+  const btn=document.getElementById('lg_verify');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Verifying…';
+  try{
+    const r=await api({action:'verify_otp',mobile,otp});
+    if(r.ok){
+      saveAuth({mobile,rememberToken:r.rememberToken,name:r.name,sections:r.sections});
+      startSession({token:r.token,name:r.name,mobile,sections:r.sections,rememberToken:r.rememberToken});
+    }
+    else lgMsg(r.error||'Incorrect or expired OTP.','err');
+  }catch(e){lgMsg('Network error — try again.','err');}
+  btn.disabled=false;btn.textContent='Verify & Login';
+};
+
+document.getElementById('lg_previewBtn').onclick=()=>startSession({token:null,name:'Preview',mobile:'',sections:['ALL'],preview:true});
+
+function startSession(sess){
+  SESSION=sess;
+  const allowed = (sess.sections.includes('ALL')) ? AUDIT.map(s=>s.key) : sess.sections;
+  RENDERED = AUDIT.filter(s=>allowed.includes(s.key));
+  if(RENDERED.length===0){lgMsg('No checklist assigned to this login. Contact admin.','err');SESSION=null;return;}
+  buildSections(RENDERED);
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('btnLogout').classList.remove('hidden');
+  const roleTxt = sess.sections.includes('ALL')?'All sections':RENDERED.map(s=>s.title).join(', ');
+  document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+roleTxt+(sess.preview?' (preview)':'');
+  if(sess.name && sess.name!=='Preview') document.getElementById('m_auditor').value=sess.name;
+  recalc();
+}
+
+document.getElementById('btnLogout').onclick=()=>{
+  if(confirm('Log out of this device? You will need the OTP again next time.')){
+    const a=loadAuth();
+    if(a&&a.mobile){try{api({action:'logout',mobile:a.mobile});}catch(e){}}
+    clearAuth();
+    location.reload();
+  }
+};
+
+/* ---------- init meta (outlet + date) ---------- */
+(function init(){
+  const sel = document.getElementById('m_outlet');
+  CONFIG.OUTLETS.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op);});
+  const other=document.createElement('option');other.value="__other";other.textContent="Other…";sel.appendChild(other);
+  document.getElementById('m_date').valueAsDate=new Date();
+  document.getElementById('thLabel').textContent=CONFIG.PASS_THRESHOLD+'%';
+  if(!CONFIG.SCRIPT_URL){document.getElementById('lg_preview').classList.remove('hidden');lgMsg('Backend not linked yet — see setup guide. You can Preview below.','');}
+  else { tryAutoLogin().then(ok=>{ if(!ok) lgMsg('',''); }); }   // remember-me: skip OTP if device is already trusted
+})();
+
+document.getElementById('m_outlet').addEventListener('change',e=>{
+  if(e.target.value==="__other"){
+    const v=prompt("Enter outlet name:");
+    if(v){const op=document.createElement('option');op.value=v;op.textContent=v;e.target.insertBefore(op,e.target.lastChild);e.target.value=v;}
+    else e.target.value="";
+  }
+});
+
+/* ---------- build only the allowed sections ---------- */
+function buildSections(list){
+  elTabs.innerHTML=''; elSections.innerHTML='';
+  list.forEach((sec,si)=>{
+    state[sec.key]={};
+    const tab=document.createElement('button');
+    tab.className='tab'+(si===0?' active':'');
+    tab.id='tab_'+sec.key;
+    tab.innerHTML=sec.title+' <span class="pct" id="tabpct_'+sec.key+'"></span><span class="dot" id="tabdot_'+sec.key+'"></span>';
+    tab.onclick=()=>showSection(sec.key);
+    elTabs.appendChild(tab);
+
+    const panel=document.createElement('div');
+    panel.className='card sec-panel'+(si===0?'':' hidden');
+    panel.id='panel_'+sec.key;
+    let html=`<div class="sec-title">${sec.title} Checklist</div>
+      <div class="sec-sub">${sec.type==='yesno'?'Mark Yes / No / NA — each Yes = 2 points (max '+sec.maxRef+').':'Rate each item 1 (poor) to 5 (excellent), or NA (max '+sec.maxRef+').'}</div>`;
+    let gi=0;
+    sec.groups.forEach(g=>{
+      if(g.name) html+=`<div class="group-h">${g.name}</div>`;
+      g.items.forEach(txt=>{
+        const id=sec.key+'_'+gi;
+        const scale = sec.type==='yesno'
+          ? `<button class="sc yes" data-v="2">Yes</button><button class="sc no" data-v="0">No</button><button class="sc na" data-v="NA">NA</button>`
+          : [1,2,3,4,5].map(n=>`<button class="sc" data-v="${n}">${n}</button>`).join('')+`<button class="sc na" data-v="NA">NA</button>`;
+        html+=`<div class="item" id="item_${id}">
+          <div class="item-txt"><span class="item-num">${gi+1}.</span><span>${txt}</span>
+            <button class="note-btn" data-note="${id}" title="Add note">✎</button></div>
+          <div class="scale" data-sec="${sec.key}" data-idx="${gi}">${scale}</div>
+          <div class="note-box hidden" id="note_${id}"><textarea placeholder="Notes / observations / evidence (optional)" data-noteinput="${id}"></textarea></div>
+        </div>`;
+        gi++;
+      });
+    });
+    html+=`<div class="secscore"><span id="secscoretxt_${sec.key}">Score: 0 / 0</span><span class="pct" id="secpct_${sec.key}">—</span></div>
+           <div class="bar"><i id="secbar_${sec.key}"></i></div>`;
+    panel.innerHTML=html;
+    elSections.appendChild(panel);
+  });
+}
+
+// score button clicks (event delegation)
+elSections.addEventListener('click',e=>{
+  const btn=e.target.closest('.sc');
+  if(btn){
+    const scale=btn.parentElement;
+    const sk=scale.dataset.sec, idx=+scale.dataset.idx;
+    [...scale.children].forEach(c=>c.classList.remove('sel'));
+    btn.classList.add('sel');
+    const v=btn.dataset.v;
+    state[sk][idx]=Object.assign(state[sk][idx]||{},{value:v==='NA'?'NA':+v});
+    recalc();
+    return;
+  }
+  const nb=e.target.closest('.note-btn');
+  if(nb){document.getElementById('note_'+nb.dataset.note).classList.toggle('hidden');}
+});
+elSections.addEventListener('input',e=>{
+  const ta=e.target.closest('[data-noteinput]');
+  if(ta){
+    const id=ta.dataset.noteinput; const sk=id.split('_')[0]; const idx=+id.split('_')[1];
+    state[sk][idx]=Object.assign(state[sk][idx]||{},{note:ta.value});
+    const nbtn=document.querySelector(`[data-note="${id}"]`);
+    if(nbtn) nbtn.classList.toggle('has', ta.value.trim().length>0);
+  }
+});
+
+function sectionScore(sec){
+  let score=0,max=0,answered=0,total=0;
+  sec.groups.forEach(g=>g.items.forEach(()=>total++));
+  Object.values(state[sec.key]).forEach(v=>{
+    if(v && v.value!==undefined && v.value!==null){
+      answered++;
+      if(v.value==='NA') return;
+      score+=v.value;
+      max+= (sec.type==='yesno'?2:5);
+    }
+  });
+  const pct = max>0 ? Math.round(score/max*100) : 0;
+  return {score,max,pct,answered,total};
+}
+function colorFor(pct){return pct>=85?'var(--green)':pct>=70?'var(--amber)':'var(--red)';}
+
+function recalc(){
+  let tScore=0,tMax=0,tAns=0,tTot=0;
+  if(!RENDERED.length) return {tScore,tMax,oPct:0,tAns,tTot};
+  RENDERED.forEach(sec=>{
+    const s=sectionScore(sec);
+    tScore+=s.score; tMax+=s.max; tAns+=s.answered; tTot+=s.total;
+    document.getElementById('secscoretxt_'+sec.key).textContent=`Score: ${s.score} / ${s.max}  (${s.answered}/${s.total} answered)`;
+    const pe=document.getElementById('secpct_'+sec.key);
+    pe.textContent=s.answered?s.pct+'%':'—'; pe.style.color=colorFor(s.pct);
+    const bar=document.getElementById('secbar_'+sec.key); bar.style.width=s.pct+'%'; bar.style.background=colorFor(s.pct);
+    const tp=document.getElementById('tabpct_'+sec.key); tp.textContent=s.answered?s.pct+'%':'';
+    const td=document.getElementById('tabdot_'+sec.key); td.style.background=s.answered?colorFor(s.pct):'transparent';
+  });
+  const oPct=tMax>0?Math.round(tScore/tMax*100):0;
+  document.getElementById('overallRing').textContent=oPct+'%';
+  const sl=document.getElementById('summaryList'); sl.innerHTML='';
+  RENDERED.forEach(sec=>{
+    const s=sectionScore(sec);
+    const row=document.createElement('div'); row.className='summary-row';
+    row.innerHTML=`<span>${sec.title} <span style="color:var(--muted);font-size:12px">(${s.answered}/${s.total})</span></span>
+      <b style="color:${colorFor(s.pct)}">${s.answered?s.score+'/'+s.max+' · '+s.pct+'%':'—'}</b>`;
+    sl.appendChild(row);
+  });
+  document.getElementById('finalPct').textContent=oPct+'%';
+  document.getElementById('finalPct').style.color=colorFor(oPct);
+  document.getElementById('finalBar').style.width=oPct+'%';
+  document.getElementById('finalBar').style.background=colorFor(oPct);
+  return {tScore,tMax,oPct,tAns,tTot};
+}
+
+function showSection(key){
+  document.querySelectorAll('.sec-panel').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('panel_'+key).classList.remove('hidden');
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab_'+key).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function toast(msg,ms=2600){
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);
+  setTimeout(()=>t.remove(),ms);
+}
+
+function collect(){
+  const meta={
+    outlet:document.getElementById('m_outlet').value.trim(),
+    date:document.getElementById('m_date').value,
+    auditor:document.getElementById('m_auditor').value.trim(),
+    manager:document.getElementById('m_manager').value.trim(),
+    fssai:document.getElementById('m_fssai').value.trim(),
+    submittedAt:new Date().toISOString()
+  };
+  const totals=recalc();
+  const sections=RENDERED.map(sec=>{
+    const s=sectionScore(sec);
+    const items=[];
+    let gi=0;
+    sec.groups.forEach(g=>g.items.forEach(txt=>{
+      const v=state[sec.key][gi]||{};
+      items.push({n:gi+1,group:g.name||sec.title,item:txt,
+        response: v.value===undefined?'':(v.value==='NA'?'NA':(sec.type==='yesno'?(v.value===2?'Yes':'No'):v.value)),
+        note:v.note||''});
+      gi++;
+    }));
+    return {key:sec.key,title:sec.title,type:sec.type,score:s.score,max:s.max,pct:s.pct,answered:s.answered,total:s.total,items};
+  });
+  const overallPct=totals.oPct;
+  return {meta,overall:{score:totals.tScore,max:totals.tMax,pct:overallPct,result:overallPct>=CONFIG.PASS_THRESHOLD?'PASS':'NEEDS IMPROVEMENT',answered:totals.tAns,total:totals.tTot},sections};
+}
+
+function validate(){
+  const m=collect().meta;
+  if(!m.outlet){toast('Select an outlet first');showMeta();return false;}
+  if(!m.date){toast('Pick the audit date');showMeta();return false;}
+  if(!m.auditor){toast('Enter auditor name');showMeta();return false;}
+  return true;
+}
+function showMeta(){window.scrollTo({top:0,behavior:'smooth'});}
+
+// download fallback (CSV of item-level + summary)
+function downloadLocal(payload){
+  const m=payload.meta;
+  let lines=[];
+  lines.push(['SVR STORE VISIT AUDIT']);
+  lines.push(['Outlet',m.outlet],['Date',m.date],['Auditor',m.auditor],['Manager',m.manager],['FSSAI',m.fssai]);
+  lines.push(['Overall',payload.overall.score+'/'+payload.overall.max,payload.overall.pct+'%',payload.overall.result]);
+  lines.push([]);
+  lines.push(['Section','Group','#','Item','Response','Note']);
+  payload.sections.forEach(s=>s.items.forEach(it=>lines.push([s.title,it.group,it.n,it.item,it.response,it.note])));
+  lines.push([]);
+  lines.push(['SECTION','SCORE','MAX','%']);
+  payload.sections.forEach(s=>lines.push([s.title,s.score,s.max,s.pct+'%']));
+  const csv=lines.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`SVR_Audit_${(m.outlet||'outlet').replace(/\s+/g,'_')}_${m.date||''}.csv`;
+  a.click();
+}
+
+document.getElementById('btnDownload').onclick=()=>{if(!validate())return;downloadLocal(collect());toast('Saved a CSV copy');};
+document.getElementById('btnPrint').onclick=()=>window.print();
+
+document.getElementById('btnSubmit').onclick=async()=>{
+  if(!validate())return;
+  const payload=collect();
+  const btn=document.getElementById('btnSubmit');
+  if(!SESSION || SESSION.preview || !CONFIG.SCRIPT_URL){
+    downloadLocal(payload);
+    toast(SESSION&&SESSION.preview?'Preview mode — saved a CSV copy (not logged to Sheet).':'No Google Sheet linked yet — saved a CSV copy instead.',4200);
+    return;
+  }
+  btn.disabled=true;btn.textContent='Submitting…';
+  try{
+    const r=await api(Object.assign({action:'submit',token:SESSION.token},payload));
+    if(r.ok){
+      toast('✓ Submitted — '+payload.overall.pct+'% ('+payload.overall.result+')',4200);
+      btn.textContent='Submitted ✓';
+      setTimeout(()=>{btn.disabled=false;btn.textContent='Submit Audit';},2500);
+    }else{
+      downloadLocal(payload);
+      toast((r.error||'Submit rejected')+' — saved a CSV backup',4600);
+      btn.disabled=false;btn.textContent='Submit Audit';
+    }
+  }catch(err){
+    downloadLocal(payload);
+    toast('Network error — saved a CSV copy as backup',4200);
+    btn.disabled=false;btn.textContent='Submit Audit';
+  }
+};
+</script>
+</body>
+</html>
