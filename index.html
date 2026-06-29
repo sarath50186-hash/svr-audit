@@ -620,10 +620,15 @@ elSections.addEventListener('click',e=>{
   if(btn){
     const scale=btn.parentElement;
     const sk=scale.dataset.sec, idx=+scale.dataset.idx;
+    const wasSelected=btn.classList.contains('sel');
     [...scale.children].forEach(c=>c.classList.remove('sel'));
-    btn.classList.add('sel');
-    const v=btn.dataset.v;
-    state[sk][idx]=Object.assign(state[sk][idx]||{},{value:v==='NA'?'NA':+v});
+    if(wasSelected){                              // tap the chosen one again to UNDO (clear it)
+      if(state[sk][idx]) delete state[sk][idx].value;
+    }else{
+      btn.classList.add('sel');
+      const v=btn.dataset.v;
+      state[sk][idx]=Object.assign(state[sk][idx]||{},{value:v==='NA'?'NA':+v});
+    }
     recalc();
     return;
   }
@@ -788,10 +793,4 @@ document.getElementById('btnSubmit').onclick=async()=>{
 };
 </script>
 <script>
-/* PWA: register service worker so the app is installable ("Add to Home screen"). */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
-}
-</script>
-</body>
-</html>
+/* PWA: register ser
