@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>SVR Store Visit Audit</title>
+<!-- PWA: installable app icon -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7a1f2b">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OIAS Checklist">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <style>
   :root{
     --brand:#7a1f2b; --brand2:#a32c3c; --bg:#f4f5f7; --card:#fff;
@@ -64,6 +73,12 @@
   .summary-row b{font-variant-numeric:tabular-nums}
   @media(max-width:520px){.meta-grid{grid-template-columns:1fr}.sc{min-width:34px}}
   @media print{header,.tabs,.footer-actions,.note-btn{display:none}.card{break-inside:avoid}}
+  .app-credit{display:flex;align-items:center;justify-content:center;gap:9px;padding:14px 12px 4px;color:var(--muted);text-align:center}
+  .app-credit img{width:34px;height:34px;border-radius:8px;object-fit:cover;flex:0 0 auto}
+  .app-credit .ac-txt{display:flex;flex-direction:column;line-height:1.15;text-align:left}
+  .app-credit .ac-txt b{font-size:12.5px;color:var(--ink);letter-spacing:.3px}
+  .app-credit .ac-txt span{font-size:10.5px;color:var(--muted)}
+  .app-credit .ac-pre{font-size:10.5px;color:var(--muted);margin-right:2px}
   /* login */
   .login-overlay{position:fixed;inset:0;background:linear-gradient(160deg,#7a1f2b,#4a121a);z-index:100;display:flex;align-items:center;justify-content:center;padding:18px}
   .login-box{background:#fff;border-radius:16px;padding:24px 22px;max-width:380px;width:100%;box-shadow:0 14px 44px rgba(0,0,0,.35)}
@@ -148,10 +163,6 @@
         <label class="fld">Manager Name</label>
         <input type="text" id="m_manager" placeholder="Outlet manager">
       </div>
-      <div class="full">
-        <label class="fld">FSSAI Licence No. &amp; Validity <span style="font-weight:400">(for Food Safety section)</span></label>
-        <input type="text" id="m_fssai" placeholder="Licence number — valid till …">
-      </div>
     </div>
   </div>
 
@@ -169,6 +180,13 @@
     <div class="bar"><i id="finalBar"></i></div>
     <div class="legend">Pass threshold: <b id="thLabel">85%</b> &nbsp;•&nbsp; <span style="color:var(--green)">●</span> ≥85% &nbsp; <span style="color:var(--amber)">●</span> 70–84% &nbsp; <span style="color:var(--red)">●</span> &lt;70%</div>
   </div>
+
+  <!-- Company credit -->
+  <div class="app-credit">
+    <span class="ac-pre">Powered by</span>
+    <img src="logo-oias.png" alt="One In All Solutions" onerror="this.style.display='none'">
+    <div class="ac-txt"><b>ONE IN ALL SOLUTIONS</b><span>Software Consultant</span></div>
+  </div>
 </div>
 
 <div class="footer-actions">
@@ -183,7 +201,7 @@
    ============================================================ */
 const CONFIG = {
   SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzk4TYO167dwBcjFuuf-GIhtuCv-rQ0fd-zUsMiju9cwxHO74x1i0NjH4OrqgieyCGlfQ/exec",
-  BYPASS_LOGIN: true,             // TEMP: skip login and open all sections to review layout. Set false to re-enable login.
+  BYPASS_LOGIN: false,            // login enabled (set true only to preview layout without login)
   PASS_THRESHOLD: 85,             // overall % to "pass"
   OUTLETS: [
     "Sangeetha - Guindy",
@@ -532,7 +550,17 @@ document.getElementById('btnLogout').onclick=()=>{
   const other=document.createElement('option');other.value="__other";other.textContent="Other…";sel.appendChild(other);
   document.getElementById('m_date').valueAsDate=new Date();
   document.getElementById('thLabel').textContent=CONFIG.PASS_THRESHOLD+'%';
-  if(CONFIG.BYPASS_LOGIN){ startSession({token:null,name:'Preview',mobile:'',sections:['ALL'],preview:true}); return; }  // TEMP layout-review bypass
+  if(CONFIG.BYPASS_LOGIN){   // TEMP layout-review bypass — render all sections, no login
+    try{
+      SESSION={token:null,name:'Preview',mobile:'',sections:['ALL'],preview:true};
+      RENDERED=AUDIT.slice();
+      buildSections(RENDERED);
+      recalc();
+      var w=document.getElementById('whoami'); if(w) w.textContent='Preview — all sections (login disabled)';
+    }catch(err){ console.error('bypass error:',err); }
+    document.getElementById('loginOverlay').classList.add('hidden');
+    return;
+  }
   if(!CONFIG.SCRIPT_URL){document.getElementById('lg_preview').classList.remove('hidden');lgMsg('Backend not linked yet — see setup guide. You can Preview below.','');}
   else { tryAutoLogin().then(ok=>{ if(!ok) lgMsg('',''); }); }   // remember-me: skip OTP if device is already trusted
 })();
@@ -677,7 +705,7 @@ function collect(){
     date:document.getElementById('m_date').value,
     auditor:document.getElementById('m_auditor').value.trim(),
     manager:document.getElementById('m_manager').value.trim(),
-    fssai:document.getElementById('m_fssai').value.trim(),
+    fssai:'',
     submittedAt:new Date().toISOString()
   };
   const totals=recalc();
@@ -749,4 +777,21 @@ document.getElementById('btnSubmit').onclick=async()=>{
       setTimeout(()=>{btn.disabled=false;btn.textContent='Submit Audit';},2500);
     }else{
       downloadLocal(payload);
-      toast((r.error||'Submit rejected')+' — saved a CSV
+      toast((r.error||'Submit rejected')+' — saved a CSV backup',4600);
+      btn.disabled=false;btn.textContent='Submit Audit';
+    }
+  }catch(err){
+    downloadLocal(payload);
+    toast('Network error — saved a CSV copy as backup',4200);
+    btn.disabled=false;btn.textContent='Submit Audit';
+  }
+};
+</script>
+<script>
+/* PWA: register service worker so the app is installable ("Add to Home screen"). */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
