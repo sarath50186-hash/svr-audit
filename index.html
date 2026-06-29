@@ -124,6 +124,10 @@
     </div>
 
     <div class="msg" id="lg_msg"></div>
+    <button class="btn btn-primary hidden" id="installBtn" style="margin-top:12px;background:#0f7b3f">📲 Install this app</button>
+    <div id="iosHint" class="hidden" style="margin-top:12px;font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;line-height:1.45">
+      To install on iPhone: tap <b>Share</b> ⬆️ then <b>“Add to Home Screen”</b>.
+    </div>
     <div id="lg_preview" class="hidden" style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
       <button class="link-btn" id="lg_previewBtn">Preview without login (all sections) ›</button>
     </div>
@@ -793,4 +797,31 @@ document.getElementById('btnSubmit').onclick=async()=>{
 };
 </script>
 <script>
-/* PWA: register ser
+/* PWA: register service worker so the app is installable ("Add to Home screen"). */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+
+/* One-tap install: capture the install prompt and expose an "Install this app" button. */
+(function(){
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  var btn = document.getElementById('installBtn');
+  var iosHint = document.getElementById('iosHint');
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault(); deferred = e;
+    if (btn && !standalone) btn.classList.remove('hidden');
+  });
+  window.addEventListener('appinstalled', function(){ if(btn) btn.classList.add('hidden'); });
+  if (btn) btn.onclick = async function(){
+    if (!deferred) return;
+    deferred.prompt();
+    try { await deferred.userChoice; } catch(e){}
+    deferred = null; btn.classList.add('hidden');
+  };
+  var isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  if (isIOS && !standalone && iosHint) iosHint.classList.remove('hidden');
+})();
+</script>
+</body>
+</html>
