@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-title" content="OIAS Checklist">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
     --brand:#7a1f2b; --brand2:#a32c3c; --bg:#f4f5f7; --card:#fff;
@@ -97,6 +98,34 @@
   .logout{background:rgba(255,255,255,.18);border:none;color:#fff;font-size:11px;font-weight:700;padding:5px 10px;border-radius:14px;cursor:pointer}
   .spin{display:inline-block;width:14px;height:14px;border:2px solid rgba(122,31,43,.3);border-top-color:var(--brand);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
   @keyframes sp{to{transform:rotate(360deg)}}
+  /* MD dashboard */
+  #mdDash{max-width:1180px;margin:0 auto;padding:14px}
+  .md-tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .md-tab{padding:10px 14px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+  .md-tab.on{color:var(--brand);border-bottom-color:var(--brand)}
+  .md-page{display:none}.md-page.on{display:block}
+  .md-hero{display:grid;grid-template-columns:220px 1fr;gap:14px;margin-bottom:14px}
+  .md-g{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .md-gc{position:relative;width:160px;height:160px}.md-gc .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .md-gc b{font-size:30px;font-weight:800}.md-gc s{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-decoration:none}
+  .md-chips{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .md-chip{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .md-chip .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+  .md-chip .v{font-size:19px;font-weight:800;margin-top:2px}.md-chip .n{font-size:11.5px;color:var(--muted)}
+  .md-sgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin:14px 0}
+  .md-sg{background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px 4px;text-align:center}
+  .md-sgc{position:relative;width:66px;height:66px;margin:0 auto}.md-sgc .ctr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px}
+  .md-sg .nm{font-size:10.5px;font-weight:600;margin-top:4px}
+  .md-panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+  .md-callout{background:linear-gradient(135deg,#fff,#faf7f3);border:1px solid var(--line);border-left:5px solid var(--brand);border-radius:12px;padding:13px 16px;font-size:13.5px;line-height:1.5}
+  table.md{width:100%;border-collapse:collapse;font-size:13px}
+  table.md th,table.md td{padding:8px 8px;text-align:center;border-bottom:1px solid var(--line)}
+  table.md th{font-size:10.5px;color:var(--muted);text-transform:uppercase}
+  table.md td.o,table.md th.o{text-align:left;font-weight:600;white-space:nowrap}
+  table.md td.c{color:#fff;font-weight:800;border-radius:5px}
+  .md-rank{display:inline-block;width:20px;height:20px;line-height:20px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;font-weight:700;margin-right:5px}.md-rank.t{background:#eab308;color:#3a2e00}
+  .md-sel{border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:13px;font-weight:600}
+  @media(max-width:820px){.md-hero{grid-template-columns:1fr}.md-sgrid{grid-template-columns:repeat(4,1fr)}}
 </style>
 </head>
 <body>
@@ -198,6 +227,9 @@
   <button class="btn btn-ghost" id="btnPrint" title="Print / PDF">🖶</button>
   <button class="btn btn-primary" id="btnSubmit">Submit Audit</button>
 </div>
+
+<!-- MD / Admin dashboard -->
+<div id="mdDash" class="hidden"></div>
 
 <script>
 /* ============================================================
@@ -526,16 +558,92 @@ document.getElementById('lg_previewBtn').onclick=()=>startSession({token:null,na
 
 function startSession(sess){
   SESSION=sess;
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('btnLogout').classList.remove('hidden');
+  // MD / Admin → dashboard instead of a checklist
+  if((sess.sections||[]).includes('DASHBOARD')){
+    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+'MD Dashboard';
+    document.querySelector('.wrap').classList.add('hidden');
+    document.querySelector('.footer-actions').classList.add('hidden');
+    document.getElementById('overallRing').classList.add('hidden');
+    openDashboard();
+    return;
+  }
   const allowed = (sess.sections.includes('ALL')) ? AUDIT.map(s=>s.key) : sess.sections;
   RENDERED = AUDIT.filter(s=>allowed.includes(s.key));
   if(RENDERED.length===0){lgMsg('No checklist assigned to this login. Contact admin.','err');SESSION=null;return;}
   buildSections(RENDERED);
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('btnLogout').classList.remove('hidden');
   const roleTxt = sess.sections.includes('ALL')?'All sections':RENDERED.map(s=>s.title).join(', ');
   document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+roleTxt+(sess.preview?' (preview)':'');
   if(sess.name && sess.name!=='Preview') document.getElementById('m_auditor').value=sess.name;
   recalc();
+}
+
+/* ============ MD DASHBOARD (in-app, live from Submissions) ========= */
+const MDSEC=[['KITCHEN','Kitchen'],['FOH','FOH'],['HR','HR'],['GENERAL','General'],['ACCOUNTS','Accounts'],['OPS','OPS'],['FOODSAFETY','Food Safety']];
+function mdColor(v){if(v==null)return '#c7ccd1';if(v>=85)return '#16a34a';if(v>=75)return '#65a30d';if(v>=65)return '#d97706';if(v>=55)return '#ea580c';return '#dc2626';}
+let mdCharts=[];
+function mdGauge(id,val){const c=document.getElementById(id);if(!c)return;mdCharts.push(new Chart(c,{type:'doughnut',data:{datasets:[{data:[val,100-val],backgroundColor:[mdColor(val),'#eef0f3'],borderWidth:0}]},options:{cutout:'74%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}));}
+async function openDashboard(){
+  const dash=document.getElementById('mdDash');dash.classList.remove('hidden');
+  dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--muted)"><span class="spin"></span> Loading dashboard…</div>';
+  let rep;try{rep=await api({action:'report',token:SESSION.token});}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
+  if(!rep.ok){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">'+(rep.error||'Could not load dashboard')+'</div>';return;}
+  renderDashboard(rep);
+}
+function renderDashboard(rep){
+  const dash=document.getElementById('mdDash');
+  const outlets=rep.outlets||[];
+  if(!outlets.length){dash.innerHTML='<div class="md-callout" style="margin-top:20px">No audit submissions yet. Once HODs submit through the app (or June seed is loaded), the scorecard appears here.</div>';return;}
+  // present sections = those with any data
+  const secs=MDSEC.filter(([k])=>outlets.some(o=>o.sections[k]!=null));
+  const keys=secs.map(s=>s[0]),labels=secs.map(s=>s[1]);
+  const secavg={};keys.forEach(k=>{const v=outlets.filter(o=>o.sections[k]!=null).map(o=>o.sections[k]);secavg[k]=v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null;});
+  const grp=Math.round(outlets.reduce((a,o)=>a+(o.overall||0),0)/outlets.length*10)/10;
+  const best=outlets[0],worst=outlets[outlets.length-1];
+  const weakK=keys.reduce((a,b)=>secavg[b]<secavg[a]?b:a,keys[0]),strongK=keys.reduce((a,b)=>secavg[b]>secavg[a]?b:a,keys[0]);
+  const lbl=k=>MDSEC.find(s=>s[0]===k)[1];
+  dash.innerHTML=`
+   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div></div>
+   <div class="md-page on" id="mdp-ov">
+     <div class="md-hero">
+       <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.month} · ${outlets.length} outlets</div></div>
+       <div class="md-chips">
+        <div class="md-chip"><div class="l">Top Outlet</div><div class="v">${best.outlet}</div><div class="n">${best.overall}%</div></div>
+        <div class="md-chip"><div class="l">Lowest Outlet</div><div class="v">${worst.outlet}</div><div class="n">${worst.overall}%</div></div>
+        <div class="md-chip"><div class="l">Strongest Area</div><div class="v" style="color:${mdColor(secavg[strongK])}">${lbl(strongK)} · ${secavg[strongK]}%</div></div>
+        <div class="md-chip"><div class="l">Weakest Area</div><div class="v" style="color:${mdColor(secavg[weakK])}">${lbl(weakK)} · ${secavg[weakK]}%</div></div>
+       </div>
+     </div>
+     <div class="md-sgrid" id="mdSg"></div>
+     <div class="md-callout"><b>${lbl(weakK)}</b> is the weakest area (${secavg[weakK]}% group avg) and the main opportunity; <b>${lbl(strongK)}</b> is strongest (${secavg[strongK]}%). Focus improvement on the bottom outlets in ${lbl(weakK)}.</div>
+     <div class="md-panel" style="margin-top:12px"><canvas id="mdSecChart" height="90"></canvas></div>
+   </div>
+   <div class="md-page" id="mdp-ol">
+     <div class="md-panel"><table class="md" id="mdHeat"></table></div>
+     <div class="md-panel"><select class="md-sel" id="mdSel">${outlets.map(o=>`<option>${o.outlet}</option>`).join('')}</select><canvas id="mdRadar" height="200" style="margin-top:10px"></canvas><div id="mdInfo"></div></div>
+   </div>
+   <div class="md-page" id="mdp-fs"><div class="md-panel"><canvas id="mdFs" height="90"></canvas></div><div class="md-callout" style="margin-top:12px">Food Safety is scored out of 72 in the audit. Target every outlet ≥ 83% (60/72). Bottom outlets need daily FIFO/expiry checks, working fly units, and grooming discipline.</div></div>`;
+  // tabs
+  dash.querySelectorAll('.md-tab').forEach(el=>el.onclick=()=>{dash.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');dash.querySelectorAll('.md-page').forEach(p=>p.classList.remove('on'));document.getElementById('mdp-'+el.dataset.t).classList.add('on');});
+  mdGauge('mdG',grp);
+  document.getElementById('mdSg').innerHTML=keys.map((k,i)=>`<div class="md-sg"><div class="md-sgc"><canvas id="mdsg${i}"></canvas><div class="ctr" style="color:${mdColor(secavg[k])}">${Math.round(secavg[k])}</div></div><div class="nm">${labels[i]}</div></div>`).join('');
+  keys.forEach((k,i)=>mdGauge('mdsg'+i,secavg[k]));
+  mdCharts.push(new Chart(document.getElementById('mdSecChart'),{type:'bar',data:{labels:labels,datasets:[{data:keys.map(k=>secavg[k]),backgroundColor:keys.map(k=>mdColor(secavg[k]))}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Group Average by Section (%)'}},scales:{y:{max:100,ticks:{callback:v=>v+'%'}}}}}));
+  // heatmap
+  let th=`<tr><th class="o">#</th><th class="o">Outlet</th>`+labels.map(l=>`<th>${l}</th>`).join('')+`<th>Overall</th></tr>`;
+  let rows=outlets.map((o,i)=>`<tr><td class="o"><span class="md-rank ${i==0?'t':''}">${i+1}</span></td><td class="o">${o.outlet}</td>`+keys.map(k=>{const v=o.sections[k];return `<td class="c" style="background:${mdColor(v)}">${v==null?'—':Math.round(v)}</td>`}).join('')+`<td class="c" style="background:${mdColor(o.overall)}">${Math.round(o.overall)}%</td></tr>`).join('');
+  document.getElementById('mdHeat').innerHTML=th+rows;
+  // outlet radar
+  let radar=null;
+  function showO(name){const o=outlets.find(x=>x.outlet===name);if(radar)radar.destroy();
+    radar=new Chart(document.getElementById('mdRadar'),{type:'radar',data:{labels:labels,datasets:[{label:name,data:keys.map(k=>o.sections[k]||0),backgroundColor:'rgba(122,31,43,.15)',borderColor:'#7a1f2b',pointBackgroundColor:'#7a1f2b'}]},options:{plugins:{legend:{display:false}},scales:{r:{min:0,max:100,ticks:{stepSize:25}}}}});
+    document.getElementById('mdInfo').innerHTML=`<div style="font-size:13px;color:var(--muted);margin-top:8px">Rank ${outlets.indexOf(o)+1}/${outlets.length} · Overall <b style="color:${mdColor(o.overall)}">${o.overall}%</b></div>`+keys.map(k=>{const v=o.sections[k];return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--line);font-size:12.5px"><span>${lbl(k)}</span><b style="color:${mdColor(v)}">${v==null?'—':Math.round(v)+'%'}</b></div>`}).join('');
+  }
+  document.getElementById('mdSel').onchange=e=>showO(e.target.value);showO(outlets[0].outlet);
+  // food safety chart
+  const fso=outlets.filter(o=>o.sections.FOODSAFETY!=null).sort((a,b)=>a.sections.FOODSAFETY-b.sections.FOODSAFETY);
+  if(fso.length) mdCharts.push(new Chart(document.getElementById('mdFs'),{type:'bar',data:{labels:fso.map(o=>o.outlet),datasets:[{data:fso.map(o=>o.sections.FOODSAFETY),backgroundColor:fso.map(o=>mdColor(o.sections.FOODSAFETY))}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Food Safety by Outlet (%)'}},scales:{x:{max:100,ticks:{callback:v=>v+'%'}}}}}));
 }
 
 document.getElementById('btnLogout').onclick=()=>{
@@ -819,6 +927,7 @@ if ('serviceWorker' in navigator) {
     try { await deferred.userChoice; } catch(e){}
     deferred = null; btn.classList.add('hidden');
   };
+  // iPhone/iPad: no install prompt API — show the Share → Add to Home Screen hint.
   var isIOS = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
   if (isIOS && !standalone && iosHint) iosHint.classList.remove('hidden');
 })();
