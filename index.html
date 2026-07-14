@@ -179,6 +179,7 @@
     </div>
     <div class="overall">
       <span class="ring" id="overallRing">0%</span>
+      <button class="logout hidden" id="btnView">📊 Dashboard</button>
       <button class="logout hidden" id="btnLogout">Logout</button>
     </div>
   </div>
@@ -599,24 +600,54 @@ function startSession(sess){
   document.getElementById('btnLogout').classList.remove('hidden');
   populateOutlets(SESSION.brand);
   document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
-  // MD / Admin → dashboard instead of a checklist
-  if((sess.sections||[]).includes('DASHBOARD')){
-    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' MD Dashboard';
-    document.querySelector('.wrap').classList.add('hidden');
-    document.querySelector('.footer-actions').classList.add('hidden');
-    document.getElementById('overallRing').classList.add('hidden');
-    openDashboard();
-    return;
+  const secs = sess.sections||[];
+  const isAdmin = secs.includes('DASHBOARD');                 // Owner / Admin (has dashboard access)
+  const allowed = secs.includes('ALL') ? AUDIT.map(s=>s.key) : secs.filter(k=>AUDIT.some(s=>s.key===k));
+  const hasChecklist = allowed.length>0;
+  if(hasChecklist){
+    RENDERED = AUDIT.filter(s=>allowed.includes(s.key));
+    buildSections(RENDERED);
+    const roleTxt = secs.includes('ALL')?'All sections':RENDERED.map(s=>s.title).join(', ');
+    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' · '+roleTxt+(sess.preview?' (preview)':'');
+    if(sess.name && sess.name!=='Preview') document.getElementById('m_auditor').value=sess.name;
+    recalc();
   }
-  const allowed = (sess.sections.includes('ALL')) ? AUDIT.map(s=>s.key) : sess.sections;
-  RENDERED = AUDIT.filter(s=>allowed.includes(s.key));
-  if(RENDERED.length===0){lgMsg('No checklist assigned to this login. Contact admin.','err');SESSION=null;return;}
-  buildSections(RENDERED);
-  const roleTxt = sess.sections.includes('ALL')?'All sections':RENDERED.map(s=>s.title).join(', ');
-  document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' · '+roleTxt+(sess.preview?' (preview)':'');
-  if(sess.name && sess.name!=='Preview') document.getElementById('m_auditor').value=sess.name;
-  recalc();
+  const vb=document.getElementById('btnView');
+  if(isAdmin && hasChecklist){          // Owner / Admin: checklist + dashboard, with a toggle
+    vb.classList.remove('hidden');
+    showChecklistView();
+  } else if(isAdmin){                    // dashboard-only login (pure MD)
+    vb.classList.add('hidden');
+    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' MD Dashboard';
+    showDashboardViewOnly();
+  } else {                              // HOD: only their own checklist
+    vb.classList.add('hidden');
+    if(!hasChecklist){lgMsg('No checklist assigned to this login. Contact admin.','err');SESSION=null;return;}
+    showChecklistView();
+  }
 }
+
+/* ---- view switching (Owner/Admin can flip between checklist and dashboard) ---- */
+function showChecklistView(){
+  document.querySelector('.wrap').classList.remove('hidden');
+  document.querySelector('.footer-actions').classList.remove('hidden');
+  document.getElementById('overallRing').classList.remove('hidden');
+  const md=document.getElementById('mdDash'); if(md) md.classList.add('hidden');
+  const vb=document.getElementById('btnView'); if(vb) vb.textContent='📊 Dashboard';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function showDashboardViewOnly(){
+  document.querySelector('.wrap').classList.add('hidden');
+  document.querySelector('.footer-actions').classList.add('hidden');
+  document.getElementById('overallRing').classList.add('hidden');
+  const vb=document.getElementById('btnView'); if(vb) vb.textContent='📝 Checklist';
+  openDashboard();
+}
+document.getElementById('btnView').onclick=()=>{
+  const md=document.getElementById('mdDash');
+  const dashVisible = md && !md.classList.contains('hidden');
+  if(dashVisible) showChecklistView(); else showDashboardViewOnly();
+};
 
 /* ============ MD DASHBOARD (in-app, live from Submissions) ========= */
 const MDSEC=[['KITCHEN','Kitchen'],['FOH','FOH'],['HR','HR'],['GENERAL','General'],['ACCOUNTS','Accounts'],['OPS','OPS'],['FOODSAFETY','Food Safety']];
