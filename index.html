@@ -140,6 +140,14 @@
       <label class="fld">Mobile Number</label>
       <input type="tel" id="lg_mobile" inputmode="numeric" placeholder="10-digit mobile" maxlength="10" autocomplete="tel">
       <button class="btn btn-primary" id="lg_send">Send OTP</button>
+      <div class="login-foot"><button class="link-btn" id="lg_pinlink">MD / Admin — login with PIN ›</button></div>
+    </div>
+
+    <div class="step" id="step_pin">
+      <label class="fld">MD / Admin PIN</label>
+      <input type="tel" id="lg_pin" inputmode="numeric" class="otp-input" placeholder="••••••" maxlength="8" autocomplete="off">
+      <button class="btn btn-primary" id="lg_pinbtn">Open Dashboard</button>
+      <div class="login-foot"><button class="link-btn" id="lg_pinback">‹ Back to mobile login</button></div>
     </div>
 
     <div class="step" id="step_otp">
@@ -239,20 +247,31 @@ const CONFIG = {
   SCRIPT_URL: "https://script.google.com/macros/s/AKfycbzk4TYO167dwBcjFuuf-GIhtuCv-rQ0fd-zUsMiju9cwxHO74x1i0NjH4OrqgieyCGlfQ/exec",
   BYPASS_LOGIN: false,            // login enabled (set true only to preview layout without login)
   PASS_THRESHOLD: 85,             // overall % to "pass"
-  OUTLETS: [
-    "Sangeetha - Guindy",
-    "Sangeetha - Kovilambakkam",
-    "Sangeetha - Medavakkam",
-    "Sangeetha - Mylapore",
-    "Sangeetha - Nandambakkam",
-    "Sangeetha - Perangalathur",
-    "Sangeetha - Poonamallee",
-    "Sangeetha - RA PURAM A/C",
-    "Sangeetha - Ramapuram",
-    "Sangeetha - Santhome",
-    "Sangeetha - Urapakkam",
-    "Sangeetha Fast Foods - RA Puram"
-  ]
+  DEFAULT_BRAND: "SANGEETHA",
+  OUTLETS_BY_BRAND: {
+    SANGEETHA: [
+      "Sangeetha - Guindy",
+      "Sangeetha - Kovilambakkam",
+      "Sangeetha - Medavakkam",
+      "Sangeetha - Mylapore",
+      "Sangeetha - Nandambakkam",
+      "Sangeetha - Perangalathur",
+      "Sangeetha - Poonamallee",
+      "Sangeetha - RA PURAM A/C",
+      "Sangeetha - Ramapuram",
+      "Sangeetha - Santhome",
+      "Sangeetha - Urapakkam",
+      "Sangeetha Fast Foods - RA Puram"
+    ],
+    SRLPS: [
+      "SVR Adyar",
+      "SVR Egmore",
+      "SVR Parrys",
+      "SVR Perambur",
+      "SVR T. Nagar",
+      "SDM Anna Nagar"
+    ]
+  }
 };
 
 /* ============================================================
@@ -514,7 +533,7 @@ async function tryAutoLogin(){
   lgMsg('Signing you in…','');
   try{
     const r=await api({action:'resume',mobile:a.mobile,rememberToken:a.rememberToken});
-    if(r.ok){startSession({token:r.token,name:r.name,mobile:a.mobile,sections:r.sections,rememberToken:a.rememberToken});return true;}
+    if(r.ok){startSession({token:r.token,name:r.name,mobile:a.mobile,sections:r.sections,rememberToken:a.rememberToken,brand:r.brand});return true;}
     clearAuth();
   }catch(e){/* offline — fall through to manual login */}
   return false;
@@ -546,8 +565,8 @@ document.getElementById('lg_verify').onclick=async()=>{
   try{
     const r=await api({action:'verify_otp',mobile,otp});
     if(r.ok){
-      saveAuth({mobile,rememberToken:r.rememberToken,name:r.name,sections:r.sections});
-      startSession({token:r.token,name:r.name,mobile,sections:r.sections,rememberToken:r.rememberToken});
+      saveAuth({mobile,rememberToken:r.rememberToken,name:r.name,sections:r.sections,brand:r.brand});
+      startSession({token:r.token,name:r.name,mobile,sections:r.sections,rememberToken:r.rememberToken,brand:r.brand});
     }
     else lgMsg(r.error||'Incorrect or expired OTP.','err');
   }catch(e){lgMsg('Network error — try again.','err');}
@@ -556,13 +575,33 @@ document.getElementById('lg_verify').onclick=async()=>{
 
 document.getElementById('lg_previewBtn').onclick=()=>startSession({token:null,name:'Preview',mobile:'',sections:['ALL'],preview:true});
 
+/* ---------- MD / Admin PIN login (no OTP) ---------- */
+document.getElementById('lg_pinlink').onclick=()=>{showStep('step_pin');lgMsg('');document.getElementById('lg_pin').focus();};
+document.getElementById('lg_pinback').onclick=()=>{showStep('step_mobile');lgMsg('');};
+document.getElementById('lg_pinbtn').onclick=async()=>{
+  const pin=(document.getElementById('lg_pin').value||'').replace(/\D/g,'');
+  if(pin.length<4){lgMsg('Enter your PIN','err');return;}
+  if(!CONFIG.SCRIPT_URL){lgMsg('App not linked to backend yet.','err');return;}
+  const btn=document.getElementById('lg_pinbtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Opening…';
+  try{
+    const r=await api({action:'pin_login',pin});
+    if(r.ok){startSession({token:r.token,name:r.name,mobile:'',sections:r.sections,brand:r.brand});}
+    else lgMsg(r.error||'Incorrect PIN.','err');
+  }catch(e){lgMsg('Network error — try again.','err');}
+  btn.disabled=false;btn.textContent='Open Dashboard';
+};
+
 function startSession(sess){
   SESSION=sess;
+  SESSION.brand=(sess.brand||CONFIG.DEFAULT_BRAND).toUpperCase();
+  const brandLbl=SESSION.brand==='SRLPS'?'SRLPS':'Sangeetha';
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('btnLogout').classList.remove('hidden');
+  populateOutlets(SESSION.brand);
+  document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
   // MD / Admin → dashboard instead of a checklist
   if((sess.sections||[]).includes('DASHBOARD')){
-    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+'MD Dashboard';
+    document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' MD Dashboard';
     document.querySelector('.wrap').classList.add('hidden');
     document.querySelector('.footer-actions').classList.add('hidden');
     document.getElementById('overallRing').classList.add('hidden');
@@ -574,7 +613,7 @@ function startSession(sess){
   if(RENDERED.length===0){lgMsg('No checklist assigned to this login. Contact admin.','err');SESSION=null;return;}
   buildSections(RENDERED);
   const roleTxt = sess.sections.includes('ALL')?'All sections':RENDERED.map(s=>s.title).join(', ');
-  document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+roleTxt+(sess.preview?' (preview)':'');
+  document.getElementById('whoami').textContent=(sess.name?sess.name+' — ':'')+brandLbl+' · '+roleTxt+(sess.preview?' (preview)':'');
   if(sess.name && sess.name!=='Preview') document.getElementById('m_auditor').value=sess.name;
   recalc();
 }
@@ -587,7 +626,7 @@ function mdGauge(id,val){const c=document.getElementById(id);if(!c)return;mdChar
 async function openDashboard(){
   const dash=document.getElementById('mdDash');dash.classList.remove('hidden');
   dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--muted)"><span class="spin"></span> Loading dashboard…</div>';
-  let rep;try{rep=await api({action:'report',token:SESSION.token});}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
+  let rep;try{rep=await api({action:'report',token:SESSION.token,brand:SESSION.brand});}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
   if(!rep.ok){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">'+(rep.error||'Could not load dashboard')+'</div>';return;}
   renderDashboard(rep);
 }
@@ -607,7 +646,7 @@ function renderDashboard(rep){
    <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div></div>
    <div class="md-page on" id="mdp-ov">
      <div class="md-hero">
-       <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.month} · ${outlets.length} outlets</div></div>
+       <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month} · ${outlets.length} outlets</div></div>
        <div class="md-chips">
         <div class="md-chip"><div class="l">Top Outlet</div><div class="v">${best.outlet}</div><div class="n">${best.overall}%</div></div>
         <div class="md-chip"><div class="l">Lowest Outlet</div><div class="v">${worst.outlet}</div><div class="n">${worst.overall}%</div></div>
@@ -655,11 +694,19 @@ document.getElementById('btnLogout').onclick=()=>{
   }
 };
 
+/* ---------- outlets by brand ---------- */
+function populateOutlets(brand){
+  brand=(brand||CONFIG.DEFAULT_BRAND).toUpperCase();
+  const list=(CONFIG.OUTLETS_BY_BRAND&&CONFIG.OUTLETS_BY_BRAND[brand])||CONFIG.OUTLETS_BY_BRAND[CONFIG.DEFAULT_BRAND]||[];
+  const sel=document.getElementById('m_outlet');
+  sel.innerHTML='<option value="">Select outlet…</option>';
+  list.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op);});
+  const other=document.createElement('option');other.value="__other";other.textContent="Other…";sel.appendChild(other);
+}
+
 /* ---------- init meta (outlet + date) ---------- */
 (function init(){
-  const sel = document.getElementById('m_outlet');
-  CONFIG.OUTLETS.forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op);});
-  const other=document.createElement('option');other.value="__other";other.textContent="Other…";sel.appendChild(other);
+  populateOutlets(CONFIG.DEFAULT_BRAND);
   document.getElementById('m_date').valueAsDate=new Date();
   document.getElementById('thLabel').textContent=CONFIG.PASS_THRESHOLD+'%';
   if(CONFIG.BYPASS_LOGIN){   // TEMP layout-review bypass — render all sections, no login
