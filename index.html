@@ -100,6 +100,12 @@
   @keyframes sp{to{transform:rotate(360deg)}}
   /* MD dashboard */
   #mdDash{max-width:1180px;margin:0 auto;padding:14px}
+  .md-period{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .md-period label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  .md-sel2{padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px;background:#fff;font-weight:600;color:var(--ink)}
+  .md-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .md-seg button{border:none;background:#fff;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--muted)}
+  .md-seg button.on{background:var(--brand);color:#fff}
   .md-tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:14px}
   .md-tab{padding:10px 14px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
   .md-tab.on{color:var(--brand);border-bottom-color:var(--brand)}
@@ -654,17 +660,39 @@ const MDSEC=[['KITCHEN','Kitchen'],['FOH','FOH'],['HR','HR'],['GENERAL','General
 function mdColor(v){if(v==null)return '#c7ccd1';if(v>=85)return '#16a34a';if(v>=75)return '#65a30d';if(v>=65)return '#d97706';if(v>=55)return '#ea580c';return '#dc2626';}
 let mdCharts=[];
 function mdGauge(id,val){const c=document.getElementById(id);if(!c)return;mdCharts.push(new Chart(c,{type:'doughnut',data:{datasets:[{data:[val,100-val],backgroundColor:[mdColor(val),'#eef0f3'],borderWidth:0}]},options:{cutout:'74%',plugins:{legend:{display:false},tooltip:{enabled:false}}}}));}
-async function openDashboard(){
+let DASH_SEL={month:null,gran:'month',week:null};
+async function openDashboard(opts){
+  opts=opts||{};
   const dash=document.getElementById('mdDash');dash.classList.remove('hidden');
   dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--muted)"><span class="spin"></span> Loading dashboard…</div>';
-  let rep;try{rep=await api({action:'report',token:SESSION.token,brand:SESSION.brand});}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
+  const payload={action:'report',token:SESSION.token,brand:SESSION.brand};
+  if(opts.month)payload.month=opts.month;
+  if(opts.gran)payload.gran=opts.gran;
+  if(opts.week)payload.week=opts.week;
+  let rep;try{rep=await api(payload);}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
   if(!rep.ok){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">'+(rep.error||'Could not load dashboard')+'</div>';return;}
+  DASH_SEL={month:(rep.month&&rep.month.key)||null, gran:rep.gran||'month', week:rep.week||null};
   renderDashboard(rep);
+}
+function periodBar(rep){
+  const months=rep.months||[];
+  const mOpts=months.length?months.map(m=>`<option value="${m.key}" ${rep.month&&m.key===rep.month.key?'selected':''}>${m.label}</option>`).join(''):'<option>—</option>';
+  const weeks=rep.weeks||[];
+  const wSel=rep.gran==='week'?`<select id="mdWeek" class="md-sel2"><option value="">Whole month</option>${weeks.map(w=>`<option value="${w.key}" ${rep.week===w.key?'selected':''}>${w.label}</option>`).join('')}</select>`:'';
+  return `<div class="md-period"><label>Period</label>
+    <select id="mdMonth" class="md-sel2">${mOpts}</select>
+    <div class="md-seg"><button data-g="month" class="${rep.gran!=='week'?'on':''}">Monthly</button><button data-g="week" class="${rep.gran==='week'?'on':''}">Weekly</button></div>
+    ${wSel}</div>`;
+}
+function bindPeriod(){
+  const mSel=document.getElementById('mdMonth'); if(mSel) mSel.onchange=()=>openDashboard({month:mSel.value, gran:DASH_SEL.gran});
+  document.querySelectorAll('.md-seg button').forEach(b=>b.onclick=()=>openDashboard({month:DASH_SEL.month, gran:b.dataset.g}));
+  const wSel=document.getElementById('mdWeek'); if(wSel) wSel.onchange=()=>openDashboard({month:DASH_SEL.month, gran:'week', week:wSel.value||null});
 }
 function renderDashboard(rep){
   const dash=document.getElementById('mdDash');
   const outlets=rep.outlets||[];
-  if(!outlets.length){dash.innerHTML='<div class="md-callout" style="margin-top:20px">No audit submissions yet. Once HODs submit through the app (or June seed is loaded), the scorecard appears here.</div>';return;}
+  if(!outlets.length){dash.innerHTML=periodBar(rep)+'<div class="md-callout" style="margin-top:12px">No audit submissions for this period yet. Pick another month above, or once audits are submitted the scorecard appears here.</div>';bindPeriod();return;}
   // present sections = those with any data
   const secs=MDSEC.filter(([k])=>outlets.some(o=>o.sections[k]!=null));
   const keys=secs.map(s=>s[0]),labels=secs.map(s=>s[1]);
@@ -673,11 +701,12 @@ function renderDashboard(rep){
   const best=outlets[0],worst=outlets[outlets.length-1];
   const weakK=keys.reduce((a,b)=>secavg[b]<secavg[a]?b:a,keys[0]),strongK=keys.reduce((a,b)=>secavg[b]>secavg[a]?b:a,keys[0]);
   const lbl=k=>MDSEC.find(s=>s[0]===k)[1];
-  dash.innerHTML=`
+  const wkNote=(rep.gran==='week'&&(!rep.weeks||!rep.weeks.length))?`<div class="md-callout" style="margin-bottom:12px">Weekly breakdown will appear once daily audits are submitted (from July). Showing the full month for now.</div>`:'';
+  dash.innerHTML=periodBar(rep)+wkNote+`
    <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div></div>
    <div class="md-page on" id="mdp-ov">
      <div class="md-hero">
-       <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month} · ${outlets.length} outlets</div></div>
+       <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month?rep.month.label:''} · ${outlets.length} outlets</div></div>
        <div class="md-chips">
         <div class="md-chip"><div class="l">Top Outlet</div><div class="v">${best.outlet}</div><div class="n">${best.overall}%</div></div>
         <div class="md-chip"><div class="l">Lowest Outlet</div><div class="v">${worst.outlet}</div><div class="n">${worst.overall}%</div></div>
@@ -695,6 +724,7 @@ function renderDashboard(rep){
    </div>
    <div class="md-page" id="mdp-fs"><div class="md-panel"><canvas id="mdFs" height="90"></canvas></div><div class="md-callout" style="margin-top:12px">Food Safety is scored out of 72 in the audit. Target every outlet ≥ 83% (60/72). Bottom outlets need daily FIFO/expiry checks, working fly units, and grooming discipline.</div></div>`;
   // tabs
+  bindPeriod();
   dash.querySelectorAll('.md-tab').forEach(el=>el.onclick=()=>{dash.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');dash.querySelectorAll('.md-page').forEach(p=>p.classList.remove('on'));document.getElementById('mdp-'+el.dataset.t).classList.add('on');});
   mdGauge('mdG',grp);
   document.getElementById('mdSg').innerHTML=keys.map((k,i)=>`<div class="md-sg"><div class="md-sgc"><canvas id="mdsg${i}"></canvas><div class="ctr" style="color:${mdColor(secavg[k])}">${Math.round(secavg[k])}</div></div><div class="nm">${labels[i]}</div></div>`).join('');
