@@ -1,5 +1,5 @@
 // SVR Audit service worker — enables installability (PWA) and a basic offline shell.
-const CACHE = 'svr-audit-v1';
+const CACHE = 'svr-audit-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
