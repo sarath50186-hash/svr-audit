@@ -619,7 +619,7 @@ function startSession(sess){
     recalc();
   }
   const vb=document.getElementById('btnView');
-  if(isAdmin && hasChecklist){          // Owner / Admin: checklist + dashboard, with a toggle
+  if(hasChecklist){          // HOD or Owner/Admin: checklist + a dashboard (scoped to their sections server-side)
     vb.classList.remove('hidden');
     showChecklistView();
   } else if(isAdmin){                    // dashboard-only login (pure MD)
