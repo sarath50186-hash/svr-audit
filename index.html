@@ -538,12 +538,19 @@ function loadAuth(){try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null'
 function clearAuth(){try{localStorage.removeItem(AUTH_KEY);}catch(e){}}
 async function tryAutoLogin(){
   const a=loadAuth();
-  if(!a||!a.mobile||!a.rememberToken||!CONFIG.SCRIPT_URL) return false;
+  if(!a||!a.rememberToken||!CONFIG.SCRIPT_URL) return false;
   lgMsg('Signing you in…','');
   try{
-    const r=await api({action:'resume',mobile:a.mobile,rememberToken:a.rememberToken});
-    if(r.ok){startSession({token:r.token,name:r.name,mobile:a.mobile,sections:r.sections,rememberToken:a.rememberToken,brand:r.brand});return true;}
-    clearAuth();
+    if(a.pin){   // MD / Admin PIN — auto-login, no PIN re-entry
+      const r=await api({action:'pin_resume',pin:a.pin,rememberToken:a.rememberToken});
+      if(r.ok){startSession({token:r.token,name:r.name,mobile:'',sections:r.sections,brand:r.brand});return true;}
+      clearAuth(); return false;
+    }
+    if(a.mobile){   // HOD mobile+OTP
+      const r=await api({action:'resume',mobile:a.mobile,rememberToken:a.rememberToken});
+      if(r.ok){startSession({token:r.token,name:r.name,mobile:a.mobile,sections:r.sections,rememberToken:a.rememberToken,brand:r.brand});return true;}
+      clearAuth();
+    }
   }catch(e){/* offline — fall through to manual login */}
   return false;
 }
@@ -594,7 +601,10 @@ document.getElementById('lg_pinbtn').onclick=async()=>{
   const btn=document.getElementById('lg_pinbtn');btn.disabled=true;btn.innerHTML='<span class="spin"></span>Opening…';
   try{
     const r=await api({action:'pin_login',pin});
-    if(r.ok){startSession({token:r.token,name:r.name,mobile:'',sections:r.sections,brand:r.brand});}
+    if(r.ok){
+      if(r.rememberToken) saveAuth({pin:pin,rememberToken:r.rememberToken,name:r.name,sections:r.sections,brand:r.brand});
+      startSession({token:r.token,name:r.name,mobile:'',sections:r.sections,brand:r.brand});
+    }
     else lgMsg(r.error||'Incorrect PIN.','err');
   }catch(e){lgMsg('Network error — try again.','err');}
   btn.disabled=false;btn.textContent='Open Dashboard';
@@ -772,6 +782,7 @@ document.getElementById('btnLogout').onclick=()=>{
   if(confirm('Log out of this device? You will need the OTP again next time.')){
     const a=loadAuth();
     if(a&&a.mobile){try{api({action:'logout',mobile:a.mobile});}catch(e){}}
+    else if(a&&a.pin){try{api({action:'logout',pin:a.pin});}catch(e){}}
     clearAuth();
     location.reload();
   }
