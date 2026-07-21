@@ -735,7 +735,7 @@ function renderDashboard(rep){
   const lbl=k=>MDSEC.find(s=>s[0]===k)[1];
   const wkNote=(rep.gran==='week'&&(!rep.weeks||!rep.weeks.length))?`<div class="md-callout" style="margin-bottom:12px">Weekly breakdown will appear once daily audits are submitted (from July). Showing the full month for now.</div>`:'';
   dash.innerHTML=periodBar(rep)+wkNote+`
-   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div></div>
+   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div><div class="md-tab" data-t="cd">Consolidated Detail</div><div class="md-tab" data-t="hs">How Scores Work · Path to 100%</div></div>
    <div class="md-page on" id="mdp-ov">
      <div class="md-hero">
        <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month?rep.month.label:''} · ${outlets.length} outlets</div></div>
@@ -754,7 +754,24 @@ function renderDashboard(rep){
      <div class="md-panel"><table class="md" id="mdHeat"></table></div>
      <div class="md-panel"><select class="md-sel" id="mdSel">${outlets.map(o=>`<option>${o.outlet}</option>`).join('')}</select><canvas id="mdRadar" height="200" style="margin-top:10px"></canvas><div id="mdInfo"></div></div>
    </div>
-   <div class="md-page" id="mdp-fs"><div class="md-panel"><canvas id="mdFs" height="90"></canvas></div><div class="md-callout" style="margin-top:12px">Food Safety is scored out of 72 in the audit. Target every outlet ≥ 83% (60/72). Bottom outlets need daily FIFO/expiry checks, working fly units, and grooming discipline.</div></div>`;
+   <div class="md-page" id="mdp-fs"><div class="md-panel"><canvas id="mdFs" height="90"></canvas></div><div class="md-callout" style="margin-top:12px">Food Safety is scored out of 72 in the audit. Target every outlet ≥ 83% (60/72). Bottom outlets need daily FIFO/expiry checks, working fly units, and grooming discipline.</div></div>
+   <div class="md-page" id="mdp-cd">
+     <div class="legend"><span><i style="background:#16a34a"></i>≥85</span><span><i style="background:#65a30d"></i>75–84</span><span><i style="background:#d97706"></i>65–74</span><span><i style="background:#ea580c"></i>55–64</span><span><i style="background:#dc2626"></i>&lt;55</span><span>· % score · "—" not submitted</span></div>
+     <div class="md-panel"><table class="md" id="mdCons"></table></div>
+     <div class="md-callout" style="margin-top:12px">Consolidated scorecard for <b>${rep.month?rep.month.label:''}</b> — every outlet against every section, with the group average and the gap to target (85%).</div>
+   </div>
+   <div class="md-page" id="mdp-hs">
+     <div class="md-callout"><b>How the score is calculated</b><br>
+      • Each checklist item is rated <b>1 to 5</b> (or NA, which is excluded).<br>
+      • <b>Section %</b> = total points scored ÷ (number of answered items × 5).<br>
+      • <b>Food Safety</b> comes from the FSSAI audit as Yes/No, scored <b>out of 72</b>.<br>
+      • <b>Overall %</b> = the average of the section %s that were actually submitted.<br>
+      • Bands: <b style="color:#16a34a">≥85 Strong</b> · <b style="color:#65a30d">75–84 Good</b> · <b style="color:#d97706">65–74 Watch</b> · <b style="color:#ea580c">55–64 Weak</b> · <b style="color:#dc2626">&lt;55 Critical</b>
+     </div>
+     <h3 style="margin:16px 0 8px;font-size:15px">Path to 100% — where the points are</h3>
+     <div class="md-panel"><table class="md" id="mdPath"></table></div>
+     <div class="md-callout" id="mdPathNote" style="margin-top:12px"></div>
+   </div>`;
   // tabs
   bindPeriod();
   dash.querySelectorAll('.md-tab').forEach(el=>el.onclick=()=>{dash.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');dash.querySelectorAll('.md-page').forEach(p=>p.classList.remove('on'));document.getElementById('mdp-'+el.dataset.t).classList.add('on');});
@@ -766,6 +783,31 @@ function renderDashboard(rep){
   let th=`<tr><th class="o">#</th><th class="o">Outlet</th>`+labels.map(l=>`<th>${l}</th>`).join('')+`<th>Overall</th></tr>`;
   let rows=outlets.map((o,i)=>`<tr><td class="o"><span class="md-rank ${i==0?'t':''}">${i+1}</span></td><td class="o">${o.outlet}</td>`+keys.map(k=>{const v=o.sections[k];return `<td class="c" style="background:${mdColor(v)}">${v==null?'—':Math.round(v)}</td>`}).join('')+`<td class="c" style="background:${mdColor(o.overall)}">${Math.round(o.overall)}%</td></tr>`).join('');
   document.getElementById('mdHeat').innerHTML=th+rows;
+  // ---- Consolidated Detail: outlets x sections + group average + gap to 85 ----
+  (function(){
+    const el=document.getElementById('mdCons'); if(!el) return;
+    let h=`<tr><th class="o">#</th><th class="o">Outlet</th>`+labels.map(l=>`<th>${l}</th>`).join('')+`<th>Overall</th></tr>`;
+    let b=outlets.map((o,i)=>`<tr><td class="o"><span class="md-rank ${i==0?'t':''}">${i+1}</span></td><td class="o">${o.outlet}</td>`+keys.map(k=>{const v=o.sections[k];return `<td class="c" style="background:${mdColor(v)}">${v==null?'—':Math.round(v)}</td>`}).join('')+`<td class="c" style="background:${mdColor(o.overall)}">${Math.round(o.overall)}%</td></tr>`).join('');
+    b+=`<tr><td class="o"></td><td class="o" style="font-weight:800">GROUP AVERAGE</td>`+keys.map(k=>`<td class="c" style="background:${mdColor(secavg[k])};font-weight:800">${secavg[k]==null?'—':Math.round(secavg[k])}</td>`).join('')+`<td class="c" style="background:${mdColor(grp)};font-weight:800">${Math.round(grp)}%</td></tr>`;
+    b+=`<tr><td class="o"></td><td class="o" style="font-weight:700;color:var(--muted)">GAP TO 85%</td>`+keys.map(k=>{const g=secavg[k]==null?null:Math.max(0,85-secavg[k]);return `<td class="c" style="background:#f1f3f5;color:${g>0?'#dc2626':'#16a34a'};font-weight:700">${g==null?'—':(g>0?'+'+Math.round(g):'✓')}</td>`}).join('')+`<td class="c" style="background:#f1f3f5"></td></tr>`;
+    el.innerHTML=h+b;
+  })();
+  // ---- Path to 100% ----
+  (function(){
+    const el=document.getElementById('mdPath'); if(!el) return;
+    const n=keys.length;
+    const ranked=keys.slice().sort((a,b)=>(secavg[a]||0)-(secavg[b]||0));
+    let h=`<tr><th class="o">Section</th><th>Group Avg</th><th>Gap to 100</th><th>Lift if raised to 85%</th><th class="o">Priority</th></tr>`;
+    let b=ranked.map((k,i)=>{
+      const v=secavg[k]||0, gap=Math.max(0,100-v), lift=Math.max(0,(85-v))/n;
+      const pri=i===0?'🔴 Fix first':(i===1?'🟠 Next':'🟢 Maintain');
+      return `<tr><td class="o">${labels[keys.indexOf(k)]}</td><td class="c" style="background:${mdColor(v)}">${Math.round(v)}%</td><td class="c">${Math.round(gap)}</td><td class="c">${lift>0?'+'+lift.toFixed(1)+' pts':'—'}</td><td class="o">${pri}</td></tr>`;
+    }).join('');
+    el.innerHTML=h+b;
+    const worst=ranked[0], wv=Math.round(secavg[worst]||0);
+    const potential=Math.round((grp + Math.max(0,(85-(secavg[worst]||0))/n))*10)/10;
+    document.getElementById('mdPathNote').innerHTML=`<b>Biggest opportunity:</b> ${labels[keys.indexOf(worst)]} is the weakest area at <b>${wv}%</b>. Bringing just this one section up to the 85% target lifts the group overall from <b>${Math.round(grp)}%</b> to about <b>${potential}%</b> — the fastest single win. Focus on the lowest-scoring outlets in that section first.`;
+  })();
   // outlet radar
   let radar=null;
   function showO(name){const o=outlets.find(x=>x.outlet===name);if(radar)radar.destroy();
