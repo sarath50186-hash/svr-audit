@@ -614,14 +614,18 @@ function startSession(sess){
   SESSION=sess;
   SESSION.brand=(sess.brand||CONFIG.DEFAULT_BRAND).toUpperCase();
   const brandLbl=SESSION.brand==='SRLPS'?'SRLPS':'Sangeetha';
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('btnLogout').classList.remove('hidden');
-  populateOutlets(SESSION.brand);
-  document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
   const secs = sess.sections||[];
   const isAdmin = secs.includes('DASHBOARD');                 // Owner / Admin (has dashboard access)
   const allowed = secs.includes('ALL') ? AUDIT.map(s=>s.key) : secs.filter(k=>AUDIT.some(s=>s.key===k));
   const hasChecklist = allowed.length>0;
+  if(!hasChecklist && !isAdmin){   // nothing matched — show a clear message, stay on the login screen
+    lgMsg('No checklist assigned to this login. Contact the admin — the section in the Users sheet may not match (use e.g. FOODSAFETY).','err');
+    SESSION=null; return;
+  }
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('btnLogout').classList.remove('hidden');
+  populateOutlets(SESSION.brand);
+  document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
   if(hasChecklist){
     RENDERED = AUDIT.filter(s=>allowed.includes(s.key));
     buildSections(RENDERED);
