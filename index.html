@@ -186,6 +186,7 @@
     </div>
     <div class="overall">
       <span class="ring" id="overallRing">0%</span>
+      <button class="logout hidden" id="btnCrit" title="Log a critical point">⚠ Critical</button>
       <button class="logout" id="btnRefresh" title="Refresh to latest version">↻ Refresh</button>
       <button class="logout hidden" id="btnView">📊 Dashboard</button>
       <button class="logout hidden" id="btnLogout">Logout</button>
@@ -247,6 +248,23 @@
 
 <!-- MD / Admin dashboard -->
 <div id="mdDash" class="hidden"></div>
+
+<!-- Critical Point (standalone — not part of the score) -->
+<div id="critOverlay" class="login-overlay hidden">
+  <div class="login-box">
+    <h2>⚠ Critical Point</h2>
+    <p class="sub">Log a critical observation. This is separate from the checklist score.</p>
+    <label class="fld">Outlet <span class="req">*</span></label>
+    <select id="cp_outlet"><option value="">Select outlet…</option></select>
+    <label class="fld">Date of the issue <span class="req">*</span></label>
+    <input type="date" id="cp_date">
+    <label class="fld">Critical point <span class="req">*</span></label>
+    <textarea id="cp_text" rows="4" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;resize:vertical" placeholder="Describe the issue clearly…"></textarea>
+    <button class="btn btn-primary" id="cp_save" style="margin-top:10px">Save Critical Point</button>
+    <div class="login-foot"><button class="link-btn" id="cp_cancel">‹ Back to app</button></div>
+    <div class="msg" id="cp_msg"></div>
+  </div>
+</div>
 
 <script>
 /* ============================================================
@@ -623,6 +641,7 @@ function startSession(sess){
   }
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('btnLogout').classList.remove('hidden');
+  if(!sess.preview && sess.token) document.getElementById('btnCrit').classList.remove('hidden');
   populateOutlets(SESSION.brand);
   document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
   if(hasChecklist){
@@ -668,6 +687,36 @@ document.getElementById('btnView').onclick=()=>{
   const md=document.getElementById('mdDash');
   const dashVisible = md && !md.classList.contains('hidden');
   if(dashVisible) showChecklistView(); else showDashboardViewOnly();
+};
+
+/* ---- Critical Points (standalone; date mandatory; not part of score) ---- */
+function openCrit(){
+  const sel=document.getElementById('cp_outlet');
+  sel.innerHTML='<option value="">Select outlet…</option>';
+  ((CONFIG.OUTLETS_BY_BRAND&&CONFIG.OUTLETS_BY_BRAND[SESSION.brand])||[]).forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op);});
+  document.getElementById('cp_date').value='';
+  document.getElementById('cp_text').value='';
+  document.getElementById('cp_msg').textContent='';
+  document.getElementById('critOverlay').classList.remove('hidden');
+}
+document.getElementById('btnCrit').onclick=openCrit;
+document.getElementById('cp_cancel').onclick=()=>document.getElementById('critOverlay').classList.add('hidden');
+document.getElementById('cp_save').onclick=async()=>{
+  const outlet=document.getElementById('cp_outlet').value;
+  const date=document.getElementById('cp_date').value;
+  const point=document.getElementById('cp_text').value.trim();
+  const msg=document.getElementById('cp_msg');
+  if(!outlet){msg.textContent='Select the outlet.';msg.className='msg err';return;}
+  if(!date){msg.textContent='Date of the issue is mandatory.';msg.className='msg err';return;}
+  if(!point){msg.textContent='Enter the critical point.';msg.className='msg err';return;}
+  if(!SESSION||!SESSION.token){msg.textContent='Please log in first.';msg.className='msg err';return;}
+  const b=document.getElementById('cp_save');b.disabled=true;b.textContent='Saving…';
+  try{
+    const r=await api({action:'add_critical',token:SESSION.token,outlet,date,point});
+    if(r.ok){document.getElementById('critOverlay').classList.add('hidden');toast('✓ Critical point logged',3000);}
+    else {msg.textContent=r.error||'Could not save.';msg.className='msg err';}
+  }catch(e){msg.textContent='Network error — try again.';msg.className='msg err';}
+  b.disabled=false;b.textContent='Save Critical Point';
 };
 
 /* ---- Refresh: clear cache + service worker, reload the newest version ---- */
@@ -738,7 +787,7 @@ function renderDashboard(rep){
   const lbl=k=>MDSEC.find(s=>s[0]===k)[1];
   const wkNote=(rep.gran==='week'&&(!rep.weeks||!rep.weeks.length))?`<div class="md-callout" style="margin-bottom:12px">Weekly breakdown will appear once daily audits are submitted (from July). Showing the full month for now.</div>`:'';
   dash.innerHTML=periodBar(rep)+wkNote+`
-   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div><div class="md-tab" data-t="cd">Consolidated Detail</div><div class="md-tab" data-t="hs">How Scores Work · Path to 100%</div></div>
+   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div><div class="md-tab" data-t="cd">Consolidated Detail</div><div class="md-tab" data-t="cp">⚠ Critical Points</div><div class="md-tab" data-t="hs">How Scores Work · Path to 100%</div></div>
    <div class="md-page on" id="mdp-ov">
      <div class="md-hero">
        <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month?rep.month.label:''} · ${outlets.length} outlets</div></div>
@@ -763,6 +812,10 @@ function renderDashboard(rep){
      <div class="md-panel"><table class="md" id="mdCons"></table></div>
      <div class="md-callout" style="margin-top:12px">Consolidated scorecard for <b>${rep.month?rep.month.label:''}</b> — every outlet against every section, with the group average and the gap to target (85%).</div>
    </div>
+   <div class="md-page" id="mdp-cp">
+     <div class="md-callout" style="margin-bottom:12px">Critical points logged by the team — separate from the scorecard. Date shown is the <b>date of the issue</b>.</div>
+     <div class="md-panel"><div id="cpList" style="font-size:13px;color:var(--muted)">Loading…</div></div>
+   </div>
    <div class="md-page" id="mdp-hs">
      <div class="md-callout"><b>How the score is calculated</b><br>
       • Each checklist item is rated <b>1 to 5</b> (or NA, which is excluded).<br>
@@ -778,6 +831,16 @@ function renderDashboard(rep){
   // tabs
   bindPeriod();
   dash.querySelectorAll('.md-tab').forEach(el=>el.onclick=()=>{dash.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');dash.querySelectorAll('.md-page').forEach(p=>p.classList.remove('on'));document.getElementById('mdp-'+el.dataset.t).classList.add('on');});
+  (async function(){
+    const el=document.getElementById('cpList'); if(!el) return;
+    try{
+      const r=await api({action:'list_critical',token:SESSION.token});
+      if(!r.ok){el.textContent=r.error||'Could not load critical points.';return;}
+      if(!(r.points||[]).length){el.textContent='No critical points logged yet. The team can add them with the ⚠ Critical button.';return;}
+      el.innerHTML='<table class="md"><tr><th class="o">Issue Date</th><th class="o">Outlet</th><th class="o">Reported By</th><th class="o" style="text-align:left">Critical Point</th><th class="o">Logged</th></tr>'+
+        r.points.map(p=>`<tr><td class="o" style="white-space:nowrap;font-weight:700">${p.date}</td><td class="o">${p.outlet}</td><td class="o">${p.by}</td><td class="o" style="text-align:left;white-space:normal">${p.point}</td><td class="o" style="white-space:nowrap;color:var(--muted)">${p.logged}</td></tr>`).join('')+'</table>';
+    }catch(e){el.textContent='Network error loading critical points.';}
+  })();
   mdGauge('mdG',grp);
   document.getElementById('mdSg').innerHTML=keys.map((k,i)=>`<div class="md-sg"><div class="md-sgc"><canvas id="mdsg${i}"></canvas><div class="ctr" style="color:${mdColor(secavg[k])}">${Math.round(secavg[k])}</div></div><div class="nm">${labels[i]}</div></div>`).join('');
   keys.forEach((k,i)=>mdGauge('mdsg'+i,secavg[k]));
@@ -1024,16 +1087,18 @@ function collect(){
       gi++;
     }));
     return {key:sec.key,title:sec.title,type:sec.type,score:s.score,max:s.max,pct:s.pct,answered:s.answered,total:s.total,items};
-  });
+  }).filter(s=>s.answered>0);   // never submit an empty section — it would count as 0% on the dashboard
   const overallPct=totals.oPct;
   return {meta,overall:{score:totals.tScore,max:totals.tMax,pct:overallPct,result:overallPct>=CONFIG.PASS_THRESHOLD?'PASS':'NEEDS IMPROVEMENT',answered:totals.tAns,total:totals.tTot},sections};
 }
 
 function validate(){
-  const m=collect().meta;
+  const p=collect();
+  const m=p.meta;
   if(!m.outlet){toast('Select an outlet first');showMeta();return false;}
   if(!m.date){toast('Pick the audit date');showMeta();return false;}
   if(!m.auditor){toast('Enter auditor name');showMeta();return false;}
+  if(!p.sections.length){toast('Nothing scored yet — rate at least one item before submitting');return false;}
   return true;
 }
 function showMeta(){window.scrollTo({top:0,behavior:'smooth'});}
