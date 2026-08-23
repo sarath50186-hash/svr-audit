@@ -53,6 +53,7 @@
   .sc.yes.sel{background:var(--green);border-color:var(--green)}
   .sc.no.sel{background:var(--red);border-color:var(--red)}
   .sc.na.sel{background:var(--muted);color:#fff;border-color:var(--muted)}
+  .sc.zero.sel{background:var(--red);border-color:var(--red);color:#fff}
   .note-btn{margin-left:auto;background:none;border:1px solid var(--line);border-radius:8px;height:36px;width:40px;font-size:15px;cursor:pointer;color:var(--muted)}
   .note-btn.has{background:#fff7ed;border-color:var(--amber);color:var(--amber)}
   .note-box{margin-top:8px}
@@ -553,6 +554,27 @@ const AUTH_KEY='svrAuth';
 function saveAuth(o){try{localStorage.setItem(AUTH_KEY,JSON.stringify(o));}catch(e){}}
 function loadAuth(){try{return JSON.parse(localStorage.getItem(AUTH_KEY)||'null');}catch(e){return null;}}
 function clearAuth(){try{localStorage.removeItem(AUTH_KEY);}catch(e){}}
+async function reauth(){
+  const a=loadAuth();
+  if(!a||!a.rememberToken) return false;
+  try{
+    if(a.pin){
+      const r=await api({action:'pin_resume',pin:a.pin,rememberToken:a.rememberToken});
+      if(r.ok){SESSION.token=r.token;return true;}
+    } else if(a.mobile){
+      const r=await api({action:'resume',mobile:a.mobile,rememberToken:a.rememberToken});
+      if(r.ok){SESSION.token=r.token;return true;}
+    }
+  }catch(e){}
+  return false;
+}
+async function apiAuthed(payload){
+  let r=await api(Object.assign({},payload,{token:SESSION.token}));
+  if(!r.ok && /session expired/i.test(r.error||'') && await reauth()){
+    r=await api(Object.assign({},payload,{token:SESSION.token}));
+  }
+  return r;
+}
 async function tryAutoLogin(){
   const a=loadAuth();
   if(!a||!a.rememberToken||!CONFIG.SCRIPT_URL) return false;
@@ -712,7 +734,7 @@ document.getElementById('cp_save').onclick=async()=>{
   if(!SESSION||!SESSION.token){msg.textContent='Please log in first.';msg.className='msg err';return;}
   const b=document.getElementById('cp_save');b.disabled=true;b.textContent='Saving…';
   try{
-    const r=await api({action:'add_critical',token:SESSION.token,outlet,date,point});
+    const r=await apiAuthed({action:'add_critical',outlet,date,point});
     if(r.ok){document.getElementById('critOverlay').classList.add('hidden');toast('✓ Critical point logged',3000);}
     else {msg.textContent=r.error||'Could not save.';msg.className='msg err';}
   }catch(e){msg.textContent='Network error — try again.';msg.className='msg err';}
@@ -749,11 +771,11 @@ async function openDashboard(opts){
   opts=opts||{};
   const dash=document.getElementById('mdDash');dash.classList.remove('hidden');
   dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--muted)"><span class="spin"></span> Loading dashboard…</div>';
-  const payload={action:'report',token:SESSION.token,brand:SESSION.brand};
+  const payload={action:'report',brand:SESSION.brand};
   if(opts.month)payload.month=opts.month;
   if(opts.gran)payload.gran=opts.gran;
   if(opts.week)payload.week=opts.week;
-  let rep;try{rep=await api(payload);}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
+  let rep;try{rep=await apiAuthed(payload);}catch(e){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">Network error loading dashboard.</div>';return;}
   if(!rep.ok){dash.innerHTML='<div style="padding:50px;text-align:center;color:var(--red)">'+(rep.error||'Could not load dashboard')+'</div>';return;}
   DASH_SEL={month:(rep.month&&rep.month.key)||null, gran:rep.gran||'month', week:rep.week||null};
   renderDashboard(rep);
@@ -834,7 +856,7 @@ function renderDashboard(rep){
   (async function(){
     const el=document.getElementById('cpList'); if(!el) return;
     try{
-      const r=await api({action:'list_critical',token:SESSION.token});
+      const r=await apiAuthed({action:'list_critical'});
       if(!r.ok){el.textContent=r.error||'Could not load critical points.';return;}
       if(!(r.points||[]).length){el.textContent='No critical points logged yet. The team can add them with the ⚠ Critical button.';return;}
       el.innerHTML='<table class="md"><tr><th class="o">Issue Date</th><th class="o">Outlet</th><th class="o">Reported By</th><th class="o" style="text-align:left">Critical Point</th><th class="o">Logged</th></tr>'+
@@ -950,7 +972,7 @@ function buildSections(list){
     panel.className='card sec-panel'+(si===0?'':' hidden');
     panel.id='panel_'+sec.key;
     let html=`<div class="sec-title">${sec.title} Checklist</div>
-      <div class="sec-sub">${sec.type==='yesno'?'Mark Yes / No / NA — each Yes = 2 points (max '+sec.maxRef+').':'Rate each item 1 (poor) to 5 (excellent), or NA (max '+sec.maxRef+').'}</div>`;
+      <div class="sec-sub">${sec.type==='yesno'?'Mark Yes / No / NA — each Yes = 2 points (max '+sec.maxRef+').':'Rate each item 0 (not performed) to 5 (excellent). NA only if the item does not exist at this outlet (max '+sec.maxRef+').'}</div>`;
     let gi=0;
     sec.groups.forEach(g=>{
       if(g.name) html+=`<div class="group-h">${g.name}</div>`;
@@ -958,7 +980,7 @@ function buildSections(list){
         const id=sec.key+'_'+gi;
         const scale = sec.type==='yesno'
           ? `<button class="sc yes" data-v="2">Yes</button><button class="sc no" data-v="0">No</button><button class="sc na" data-v="NA">NA</button>`
-          : [1,2,3,4,5].map(n=>`<button class="sc" data-v="${n}">${n}</button>`).join('')+`<button class="sc na" data-v="NA">NA</button>`;
+          : [0,1,2,3,4,5].map(n=>`<button class="sc${n===0?' zero':''}" data-v="${n}">${n}</button>`).join('')+`<button class="sc na" data-v="NA">NA</button>`;
         html+=`<div class="item" id="item_${id}">
           <div class="item-txt"><span class="item-num">${gi+1}.</span><span>${txt}</span>
             <button class="note-btn" data-note="${id}" title="Add note">✎</button></div>
@@ -1138,7 +1160,7 @@ document.getElementById('btnSubmit').onclick=async()=>{
   }
   btn.disabled=true;btn.textContent='Submitting…';
   try{
-    const r=await api(Object.assign({action:'submit',token:SESSION.token},payload));
+    const r=await apiAuthed(Object.assign({action:'submit'},payload));
     if(r.ok){
       toast('✓ Submitted — '+payload.overall.pct+'% ('+payload.overall.result+')',4200);
       btn.textContent='Submitted ✓';
