@@ -187,7 +187,7 @@
     </div>
     <div class="overall">
       <span class="ring" id="overallRing">0%</span>
-      <button class="logout hidden" id="btnCrit" title="Log a critical point">⚠ Critical</button>
+      <button class="logout hidden" id="btnDl" title="Download your checklist with comments">⬇ Download</button>
       <button class="logout" id="btnRefresh" title="Refresh to latest version">↻ Refresh</button>
       <button class="logout hidden" id="btnView">📊 Dashboard</button>
       <button class="logout hidden" id="btnLogout">Logout</button>
@@ -250,20 +250,18 @@
 <!-- MD / Admin dashboard -->
 <div id="mdDash" class="hidden"></div>
 
-<!-- Critical Point (standalone — not part of the score) -->
-<div id="critOverlay" class="login-overlay hidden">
+<!-- Download checklist (scores + comments as CSV) -->
+<div id="dlOverlay" class="login-overlay hidden">
   <div class="login-box">
-    <h2>⚠ Critical Point</h2>
-    <p class="sub">Log a critical observation. This is separate from the checklist score.</p>
+    <h2>⬇ Download Checklist</h2>
+    <p class="sub">Select the outlet and audit date — you get the checklist scores with comments as a CSV file (opens in Excel).</p>
     <label class="fld">Outlet <span class="req">*</span></label>
-    <select id="cp_outlet"><option value="">Select outlet…</option></select>
-    <label class="fld">Date of the issue <span class="req">*</span></label>
-    <input type="date" id="cp_date">
-    <label class="fld">Critical point <span class="req">*</span></label>
-    <textarea id="cp_text" rows="4" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;resize:vertical" placeholder="Describe the issue clearly…"></textarea>
-    <button class="btn btn-primary" id="cp_save" style="margin-top:10px">Save Critical Point</button>
-    <div class="login-foot"><button class="link-btn" id="cp_cancel">‹ Back to app</button></div>
-    <div class="msg" id="cp_msg"></div>
+    <select id="dl_outlet"><option value="">Select outlet…</option></select>
+    <label class="fld">Audit date <span class="req">*</span></label>
+    <input type="date" id="dl_date">
+    <button class="btn btn-primary" id="dl_go" style="margin-top:10px">Download CSV</button>
+    <div class="login-foot"><button class="link-btn" id="dl_cancel">‹ Back to app</button></div>
+    <div class="msg" id="dl_msg"></div>
   </div>
 </div>
 
@@ -663,7 +661,7 @@ function startSession(sess){
   }
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('btnLogout').classList.remove('hidden');
-  if(!sess.preview && sess.token) document.getElementById('btnCrit').classList.remove('hidden');
+  if(!sess.preview && sess.token) document.getElementById('btnDl').classList.remove('hidden');
   populateOutlets(SESSION.brand);
   document.querySelector('header h1').textContent=(SESSION.brand==='SRLPS'?'SRLPS':'SVR')+' Store Visit Audit';
   if(hasChecklist){
@@ -711,34 +709,45 @@ document.getElementById('btnView').onclick=()=>{
   if(dashVisible) showChecklistView(); else showDashboardViewOnly();
 };
 
-/* ---- Critical Points (standalone; date mandatory; not part of score) ---- */
-function openCrit(){
-  const sel=document.getElementById('cp_outlet');
+/* ---- Download checklist (scores + comments) as CSV ---- */
+function openDl(){
+  const sel=document.getElementById('dl_outlet');
   sel.innerHTML='<option value="">Select outlet…</option>';
   ((CONFIG.OUTLETS_BY_BRAND&&CONFIG.OUTLETS_BY_BRAND[SESSION.brand])||[]).forEach(o=>{const op=document.createElement('option');op.value=o;op.textContent=o;sel.appendChild(op);});
-  document.getElementById('cp_date').value='';
-  document.getElementById('cp_text').value='';
-  document.getElementById('cp_msg').textContent='';
-  document.getElementById('critOverlay').classList.remove('hidden');
+  document.getElementById('dl_date').valueAsDate=new Date();
+  document.getElementById('dl_msg').textContent='';
+  document.getElementById('dlOverlay').classList.remove('hidden');
 }
-document.getElementById('btnCrit').onclick=openCrit;
-document.getElementById('cp_cancel').onclick=()=>document.getElementById('critOverlay').classList.add('hidden');
-document.getElementById('cp_save').onclick=async()=>{
-  const outlet=document.getElementById('cp_outlet').value;
-  const date=document.getElementById('cp_date').value;
-  const point=document.getElementById('cp_text').value.trim();
-  const msg=document.getElementById('cp_msg');
+document.getElementById('btnDl').onclick=openDl;
+document.getElementById('dl_cancel').onclick=()=>document.getElementById('dlOverlay').classList.add('hidden');
+document.getElementById('dl_go').onclick=async()=>{
+  const outlet=document.getElementById('dl_outlet').value;
+  const date=document.getElementById('dl_date').value;
+  const msg=document.getElementById('dl_msg');
   if(!outlet){msg.textContent='Select the outlet.';msg.className='msg err';return;}
-  if(!date){msg.textContent='Date of the issue is mandatory.';msg.className='msg err';return;}
-  if(!point){msg.textContent='Enter the critical point.';msg.className='msg err';return;}
+  if(!date){msg.textContent='Pick the audit date.';msg.className='msg err';return;}
   if(!SESSION||!SESSION.token){msg.textContent='Please log in first.';msg.className='msg err';return;}
-  const b=document.getElementById('cp_save');b.disabled=true;b.textContent='Saving…';
+  const b=document.getElementById('dl_go');b.disabled=true;b.textContent='Preparing…';
   try{
-    const r=await apiAuthed({action:'add_critical',outlet,date,point});
-    if(r.ok){document.getElementById('critOverlay').classList.add('hidden');toast('✓ Critical point logged',3000);}
-    else {msg.textContent=r.error||'Could not save.';msg.className='msg err';}
-  }catch(e){msg.textContent='Network error — try again.';msg.className='msg err';}
-  b.disabled=false;b.textContent='Save Critical Point';
+    const r=await apiAuthed({action:'checklist_data',outlet,date});
+    if(!r.ok){
+      msg.className='msg err';
+      msg.textContent=(r.error||'Could not fetch.')+(r.dates&&r.dates.length?(' Available dates: '+r.dates.join(', ')):'');
+    }else{
+      const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+      let lines=[["Outlet",r.outlet],["Audit Date",r.date],["Downloaded",new Date().toLocaleString()],[]];
+      lines.push(["Section","Group","#","Checklist Item","Score","Comment"]);
+      r.items.forEach(it=>lines.push([it.sec,it.group,it.n,it.item,it.resp,it.note]));
+      const csv="\ufeff"+lines.map(row=>row.map(q).join(",")).join("\r\n");
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+      a.download=`Checklist_${r.outlet.replace(/\s+/g,'_')}_${r.date}.csv`;
+      a.click();
+      msg.className='msg ok'; msg.textContent='✓ Downloaded — '+r.items.length+' items (with comments).';
+      toast('✓ Checklist downloaded',3000);
+    }
+  }catch(e){msg.className='msg err';msg.textContent='Network error — try again.';}
+  b.disabled=false;b.textContent='Download CSV';
 };
 
 /* ---- Refresh: clear cache + service worker, reload the newest version ---- */
@@ -809,7 +818,7 @@ function renderDashboard(rep){
   const lbl=k=>MDSEC.find(s=>s[0]===k)[1];
   const wkNote=(rep.gran==='week'&&(!rep.weeks||!rep.weeks.length))?`<div class="md-callout" style="margin-bottom:12px">Weekly breakdown will appear once daily audits are submitted (from July). Showing the full month for now.</div>`:'';
   dash.innerHTML=periodBar(rep)+wkNote+`
-   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div><div class="md-tab" data-t="cd">Consolidated Detail</div><div class="md-tab" data-t="cp">⚠ Critical Points</div><div class="md-tab" data-t="hs">How Scores Work · Path to 100%</div></div>
+   <div class="md-tabs"><div class="md-tab on" data-t="ov">Overview</div><div class="md-tab" data-t="ol">Outlets</div><div class="md-tab" data-t="fs">Food Safety</div><div class="md-tab" data-t="cd">Consolidated Detail</div><div class="md-tab" data-t="hs">How Scores Work · Path to 100%</div></div>
    <div class="md-page on" id="mdp-ov">
      <div class="md-hero">
        <div class="md-g"><div class="md-gc"><canvas id="mdG"></canvas><div class="ctr"><b style="color:${mdColor(grp)}">${grp}%</b><s>Group Average</s></div></div><div style="font-size:11px;color:var(--muted);margin-top:8px">${rep.brand==='SRLPS'?'SRLPS':'Sangeetha'} · ${rep.month?rep.month.label:''} · ${outlets.length} outlets</div></div>
@@ -834,10 +843,6 @@ function renderDashboard(rep){
      <div class="md-panel"><table class="md" id="mdCons"></table></div>
      <div class="md-callout" style="margin-top:12px">Consolidated scorecard for <b>${rep.month?rep.month.label:''}</b> — every outlet against every section, with the group average and the gap to target (85%).</div>
    </div>
-   <div class="md-page" id="mdp-cp">
-     <div class="md-callout" style="margin-bottom:12px">Critical points logged by the team — separate from the scorecard. Date shown is the <b>date of the issue</b>.</div>
-     <div class="md-panel"><div id="cpList" style="font-size:13px;color:var(--muted)">Loading…</div></div>
-   </div>
    <div class="md-page" id="mdp-hs">
      <div class="md-callout"><b>How the score is calculated</b><br>
       • Each checklist item is rated <b>1 to 5</b> (or NA, which is excluded).<br>
@@ -853,16 +858,6 @@ function renderDashboard(rep){
   // tabs
   bindPeriod();
   dash.querySelectorAll('.md-tab').forEach(el=>el.onclick=()=>{dash.querySelectorAll('.md-tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');dash.querySelectorAll('.md-page').forEach(p=>p.classList.remove('on'));document.getElementById('mdp-'+el.dataset.t).classList.add('on');});
-  (async function(){
-    const el=document.getElementById('cpList'); if(!el) return;
-    try{
-      const r=await apiAuthed({action:'list_critical'});
-      if(!r.ok){el.textContent=r.error||'Could not load critical points.';return;}
-      if(!(r.points||[]).length){el.textContent='No critical points logged yet. The team can add them with the ⚠ Critical button.';return;}
-      el.innerHTML='<table class="md"><tr><th class="o">Issue Date</th><th class="o">Outlet</th><th class="o">Reported By</th><th class="o" style="text-align:left">Critical Point</th><th class="o">Logged</th></tr>'+
-        r.points.map(p=>`<tr><td class="o" style="white-space:nowrap;font-weight:700">${p.date}</td><td class="o">${p.outlet}</td><td class="o">${p.by}</td><td class="o" style="text-align:left;white-space:normal">${p.point}</td><td class="o" style="white-space:nowrap;color:var(--muted)">${p.logged}</td></tr>`).join('')+'</table>';
-    }catch(e){el.textContent='Network error loading critical points.';}
-  })();
   mdGauge('mdG',grp);
   document.getElementById('mdSg').innerHTML=keys.map((k,i)=>`<div class="md-sg"><div class="md-sgc"><canvas id="mdsg${i}"></canvas><div class="ctr" style="color:${mdColor(secavg[k])}">${Math.round(secavg[k])}</div></div><div class="nm">${labels[i]}</div></div>`).join('');
   keys.forEach((k,i)=>mdGauge('mdsg'+i,secavg[k]));
