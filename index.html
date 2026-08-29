@@ -252,11 +252,11 @@
 
 <!-- Download checklist (scores + comments as CSV) -->
 <div id="dlOverlay" class="login-overlay hidden">
-  <div class="login-box">
+  <div class="login-box" style="max-width:560px;width:94vw;text-align:left">
     <h2>⬇ Download Checklist</h2>
     <p class="sub">Pick one or more outlets and a date range — you get all those audits (scores + comments) in one CSV (opens in Excel).</p>
     <label class="fld">Outlets <span class="req">*</span></label>
-    <div id="dl_outlets" style="max-height:190px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px"></div>
+    <div id="dl_outlets" style="max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:6px 12px"></div>
     <div style="display:flex;gap:10px;margin-top:10px">
       <div style="flex:1"><label class="fld">From date <span class="req">*</span></label><input type="date" id="dl_from" style="width:100%"></div>
       <div style="flex:1"><label class="fld">To date <span class="req">*</span></label><input type="date" id="dl_to" style="width:100%"></div>
@@ -715,8 +715,9 @@ document.getElementById('btnView').onclick=()=>{
 function openDl(){
   const box=document.getElementById('dl_outlets');
   const list=(CONFIG.OUTLETS_BY_BRAND&&CONFIG.OUTLETS_BY_BRAND[SESSION.brand])||[];
-  let html='<label style="display:flex;align-items:center;gap:8px;font-weight:600;padding:3px 0;border-bottom:1px solid var(--line);margin-bottom:4px"><input type="checkbox" id="dl_all">All outlets</label>';
-  html+=list.map(o=>`<label style="display:flex;align-items:center;gap:8px;padding:3px 0"><input type="checkbox" class="dl_ck" value="${o}">${o}</label>`).join('');
+  const ckStyle='width:18px;height:18px;flex:0 0 auto;margin:0';
+  let html='<label style="display:flex;align-items:center;gap:10px;font-weight:700;padding:7px 2px;border-bottom:1px solid var(--line);margin-bottom:2px;cursor:pointer"><input type="checkbox" id="dl_all" style="'+ckStyle+'"><span>All outlets</span></label>';
+  html+=list.map(o=>`<label style="display:flex;align-items:center;gap:10px;padding:7px 2px;cursor:pointer;border-bottom:1px solid #f1f1f4"><input type="checkbox" class="dl_ck" value="${o}" style="${ckStyle}"><span>${o}</span></label>`).join('');
   box.innerHTML=html;
   document.getElementById('dl_all').onclick=e=>{document.querySelectorAll('#dl_outlets .dl_ck').forEach(c=>c.checked=e.target.checked);};
   const today=new Date(), first=new Date(today.getFullYear(),today.getMonth(),1);
